@@ -1,0 +1,11 @@
+# Raw + derived business data — NOT published
+Raw Data*.csv
+*.csv
+dashboard_data.json
+merged_analysis.csv
+summary.json
+
+# OS / tooling
+.DS_Store
+__pycache__/
+*.pyc
