@@ -378,5 +378,6 @@ setTab('all');
 </body>
 </html>'''
 
-open('Session Demand Dashboard.html','w').write(HTML)
-print('wrote Session Demand Dashboard.html', len(HTML), 'bytes')
+for fn in ('Session Demand Dashboard.html', 'index.html'):  # index.html = GitHub Pages root
+    open(fn,'w').write(HTML)
+print('wrote Session Demand Dashboard.html + index.html', len(HTML), 'bytes')
