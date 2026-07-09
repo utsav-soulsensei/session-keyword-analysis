@@ -142,7 +142,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div id="word-rate" class="dual"></div>
 </div>
 <div class="card">
-  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Top theme keywords by total demand — <b>click a row</b> to see its top 5 sessions</div>
+  <div id="kw-note" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
   <div id="kw-tbl"></div>
 </div>
 
@@ -305,9 +305,14 @@ function render(V, other){
   ['Type',r=>r.key],['Sessions',r=>r.n],['Total PV',r=>fmt(r.PV_total)],
   ['Median PV',r=>Math.round(r.PV_median)],['Add-to-cart',r=>pct(r.cart)],['Conversion',r=>pct(r.sale)]]);
 
+ const single=V.kw_mode==='single';
+ document.getElementById('kw-note').innerHTML = single
+   ? 'Each session counted <b>once</b>, under its single <b>main theme</b> (short titles) — so numbers add up to the totals above. <b>Click a row</b> for its top 5 sessions.'
+   : 'Multi-tag: a session appears under <b>every</b> theme word in its name (so it can be counted more than once). <b>Click a row</b> for its top 5 sessions.';
  makeTable(document.getElementById('kw-tbl'),{
-   rows:V.keywords, cols:RATE_COLS('Keyword'), searchGet:r=>r.key,
-   placeholder:'Search keywords…', noun:'keywords', sortCol:2, sortDir:-1,
+   rows:V.keywords, cols:RATE_COLS(single?'Main theme':'Keyword'), searchGet:r=>r.key,
+   placeholder:single?'Search themes…':'Search keywords…', noun:single?'themes':'keywords',
+   sortCol:2, sortDir:-1,
    expandGet:r=>drillHtml((V.keyword_sessions||{})[r.key]) });
 
  makeTable(document.getElementById('leader-tbl'),{
@@ -362,7 +367,8 @@ function setTab(k){
  const BAN={
   all:`Showing <b>all ${n('all')}</b> tracked sessions — every type and leader included.`,
   filtered:`Showing <b>${n('filtered')}</b> sessions — <b>excluding 4 high-volume leaders</b> (${EXCL.join(', ')}) who together drove ~30% of all page views. The "typical session" view, undistorted by the biggest names.`,
-  online_clean:`Showing <b>${n('online_clean')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b>. The most conservative baseline: what a standard online session, run by a non-star leader, actually does.`,
+  online_clean:`Showing <b>${n('online_clean')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b>. The most conservative baseline: what a standard online session, run by a non-star leader, actually does. Keywords here are <b>multi-tagged</b> (a session counts under every theme word in its name).`,
+  online_single:`Same cut as the previous tab (<b>${n('online_single')}</b> online sessions, excl. 4 leaders) — but each session is filed under its <b>single main theme</b> with short titles, so themes are mutually exclusive and comparable. Use this tab to see which <b>one</b> theme truly drives demand & conversion.`,
  };
  b.innerHTML=BAN[k];
  window.scrollTo({top:0,behavior:'instant'});
@@ -370,7 +376,8 @@ function setTab(k){
 document.getElementById('tabs').innerHTML=[
  ['all','All sessions',DATA.all.overall.sessions+' sessions'],
  ['filtered','Excluding 4 outlier leaders',DATA.filtered.overall.sessions+' sessions'],
- ['online_clean','Online only, excl. 4 leaders',DATA.online_clean.overall.sessions+' sessions'],
+ ['online_clean','Online, excl. 4 (multi-tag)',DATA.online_clean.overall.sessions+' sessions'],
+ ['online_single','Online, excl. 4 (main theme)',DATA.online_single.overall.sessions+' sessions'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
 setTab('all');

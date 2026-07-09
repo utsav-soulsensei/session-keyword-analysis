@@ -2,7 +2,16 @@ import pandas as pd, json
 
 EXCLUDE = ['Kavyal Sedanni','Dr. Tamanna C','Dr. Rashmi N Muthalkar','Munisha Khatwani']
 
-def build(df):
+def session_list(sub):
+    top = sub.sort_values('PV', ascending=False).head(5)
+    return [{
+        'name':str(r['name_clean']),'leader':str(r['leader_name']),
+        'PV':int(r['PV']),'cart':float(r['RC_rate']),'sale':float(r['RS_rate']),
+        'price':int(r['price']),'type':str(r['type']),
+        'date':str(r['startIST'])[:16] if pd.notna(r.get('startIST')) else ''
+    } for _,r in top.iterrows()]
+
+def build(df, single_kw=False):
     def pooled_rows(col, order=None):
         out=[]
         for k, sub in df.groupby(col):
@@ -37,27 +46,33 @@ def build(df):
                    'cart':float(100*sub['carts'].sum()/pv),'sale':float(100*sub['sales'].sum()/pv)})
     d['wordq']=wq
 
-    kw_cols=[c for c in df.columns if c.startswith('kw_')]
     kws=[]
     kw_sessions={}
-    for c in kw_cols:
-        sub=df[df[c]==1]
-        if len(sub)<15: continue
-        key=c[3:].replace('_',' ')
-        pv=sub['PV'].sum()
-        kws.append({'key':key,'n':int(len(sub)),'PV_total':int(pv),
-                    'PV_median':float(sub['PV'].median()),
-                    'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
-                    'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
-        top=sub.sort_values('PV',ascending=False).head(5)
-        kw_sessions[key]=[{
-            'name':str(r['name_clean']),'leader':str(r['leader_name']),
-            'PV':int(r['PV']),'cart':float(r['RC_rate']),'sale':float(r['RS_rate']),
-            'price':int(r['price']),'type':str(r['type']),
-            'date':str(r['startIST'])[:16] if 'startIST' in r and pd.notna(r['startIST']) else ''
-        } for _,r in top.iterrows()]
+    if single_kw:
+        # Each session under exactly ONE main keyword (short titles)
+        for key, sub in df.groupby('main_keyword'):
+            if len(sub) < 3: continue
+            pv=sub['PV'].sum()
+            kws.append({'key':str(key),'n':int(len(sub)),'PV_total':int(pv),
+                        'PV_median':float(sub['PV'].median()),
+                        'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
+                        'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+            kw_sessions[str(key)]=session_list(sub)
+    else:
+        # Multi-tag: a session appears under every theme word it contains
+        for c in [c for c in df.columns if c.startswith('kw_')]:
+            sub=df[df[c]==1]
+            if len(sub)<15: continue
+            key=c[3:].replace('_',' ')
+            pv=sub['PV'].sum()
+            kws.append({'key':key,'n':int(len(sub)),'PV_total':int(pv),
+                        'PV_median':float(sub['PV'].median()),
+                        'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
+                        'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+            kw_sessions[key]=session_list(sub)
     d['keywords']=sorted(kws,key=lambda r:-r['PV_total'])
     d['keyword_sessions']=kw_sessions
+    d['kw_mode']='single' if single_kw else 'multi'
 
     lt=[]
     for k,sub in df.groupby('leader_name'):
@@ -85,10 +100,12 @@ out = {
     'all': build(df),
     'filtered': build(no4),
     'online_clean': build(online_no4),
+    'online_single': build(online_no4, single_kw=True),
     'excluded_leaders': EXCLUDE,
 }
 with open('dashboard_data.json','w') as f:
     json.dump(out,f,indent=1)
-print('wrote dashboard_data.json (all + filtered + online_clean)')
-for k in ['all','filtered','online_clean']:
-    print(f'{k:13s}:', out[k]['overall'])
+print('wrote dashboard_data.json (all + filtered + online_clean + online_single)')
+for k in ['all','filtered','online_clean','online_single']:
+    print(f'{k:14s}:', out[k]['overall'])
+print('single-kw categories:', len(out['online_single']['keywords']))
