@@ -13,14 +13,14 @@ HTML = r'''<!DOCTYPE html>
   --surface-1:#fcfcfb; --page:#f9f9f7;
   --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
   --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
-  --s1:#2a78d6; --s2:#1baf7a; --s3:#eb6834; --good:#0ca30c; --warn:#fab219;
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#eb6834; --s4:#4a3aa7; --good:#0ca30c; --warn:#fab219;
 }
 @media (prefers-color-scheme: dark){
   :root{
     --surface-1:#1a1a19; --page:#0d0d0d;
     --text-primary:#fff; --text-secondary:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-    --s1:#3987e5; --s2:#199e70; --s3:#d95926; --good:#0ca30c;
+    --s1:#3987e5; --s2:#199e70; --s3:#d95926; --s4:#9085e9; --good:#0ca30c;
   }
 }
 *{box-sizing:border-box}
@@ -152,7 +152,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Site PV by month</div><div id="site-month"></div></div>
 </div>
 <div class="card">
-  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Month × day-of-week heatmap <span style="color:var(--muted)">(darker = more page views)</span></div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Site PV by weekday, <b>one line per month</b> — the month-on-month pattern</div>
   <div id="site-heat"></div>
 </div>
 
@@ -195,10 +195,10 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
     <div class="grp"><span class="lbl">Metric</span><div class="pillrow" id="mom-metric"></div></div>
   </div>
   <div id="mom-note" style="font-size:12px;color:var(--muted);margin:6px 0 4px"></div>
-  <h2>Day of week — month on month <span class="sub">rows = month · columns = weekday</span></h2>
-  <div class="card"><div class="heatwrap"><div id="mom-dow"></div></div></div>
-  <h2>Hour of day — month on month <span class="sub">rows = month · columns = hour (IST)</span></h2>
-  <div class="card"><div class="heatwrap"><div id="mom-hour"></div></div></div>
+  <h2>Day of week — month on month <span class="sub">one line per month · x = weekday</span></h2>
+  <div class="card"><div id="mom-dow"></div></div>
+  <h2>Hour of day — month on month <span class="sub">one line per month · x = hour (IST)</span></h2>
+  <div class="card"><div id="mom-hour"></div></div>
 </div><!-- /mom-view -->
 
 <div class="foot">Sheet1 (funnel) + Sheet2 (course info), joined on instance id · rates are PV-weighted</div>
@@ -256,20 +256,13 @@ function renderSite(V){
    s.innerHTML=`${fmt(S.by_dow[i].pv)} <span style="color:var(--muted)">· ${idx}</span>`;
  });
  barChart(document.getElementById('site-month'),S.by_month,r=>r.pv,r=>r.month.replace(' 2026',''),css('--s2'),fmt);
- // heatmap
+ // month-on-month line chart: site PV by weekday, one line per month
  const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
  const months=[...new Set(S.matrix.map(m=>m.month))];
- const mx=Math.max(...S.matrix.map(m=>m.pv));
  const cell=(m,d)=>{const c=S.matrix.find(x=>x.month===m&&x.day===d); return c?c.pv:0;};
- let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:3px"><tr><th></th>'
-   +days.map(d=>`<th style="font-size:10px;color:var(--muted);font-weight:600">${d.slice(0,3)}</th>`).join('')+'</tr>';
- months.forEach(m=>{
-   h+=`<tr><td style="font-size:11px;color:var(--text-secondary);text-align:left;white-space:nowrap">${m.replace(' 2026','')}</td>`;
-   days.forEach(d=>{const v=cell(m,d); const a=(0.12+0.88*v/mx).toFixed(2);
-     h+=`<td title="${m} ${d}: ${v.toLocaleString()} PV" style="background:color-mix(in srgb, var(--s1) ${Math.round(a*100)}%, transparent);color:var(--text-primary);font-size:11px;padding:8px 6px;border-radius:4px;text-align:center;min-width:46px;font-variant-numeric:tabular-nums">${fmt(v)}</td>`;});
-   h+='</tr>';
- });
- document.getElementById('site-heat').innerHTML=h+'</table></div>';
+ const siteSeries=months.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i%MONTH_COLORS.length],
+   values:days.map(d=>cell(m,d))}));
+ lineChart(document.getElementById('site-heat'), ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], siteSeries, fmt);
  const bd=[...S.by_dow].sort((a,b)=>b.pv-a.pv);
  const bm=[...S.by_month].sort((a,b)=>b.pv-a.pv);
  const scopeTxt = scope==='no4'
@@ -509,20 +502,29 @@ const MOM_METRICS=[
 ];
 let momCohort='all', momMetric='session_pv';
 
-function momHeat(el, rows, field, colKeys, colLabels, met, minw){
- const map={}; rows.forEach(r=>map[r.month+'|'+r[field]]=r);
- const mx=Math.max(...rows.map(met.get),1);
- let h='<table class="heat"><tr><th></th>'+colLabels.map(c=>`<th class="ch">${c}</th>`).join('')+'</tr>';
- MONTHS_JS.forEach(m=>{
-   h+=`<tr><td class="rk">${m.replace(' 2026','')}</td>`;
-   colKeys.forEach(ck=>{
-     const r=map[m+'|'+ck]; const v=r?met.get(r):0;
-     const a=v>0?(0.10+0.90*v/mx):0;
-     h+=`<td title="${m} · ${ck}: ${met.f(v)}" style="background:color-mix(in srgb, var(--s1) ${Math.round(a*100)}%, transparent);color:var(--text-primary);font-size:10.5px;padding:7px 4px;border-radius:4px;min-width:${minw}px">${v>0?met.f(v):'·'}</td>`;
-   });
-   h+='</tr>';
+const MONTH_COLORS=['var(--s1)','var(--s2)','var(--s3)','var(--s4)'];
+// one line per month; single y-axis (metric), x = weekday/hour categories
+function lineChart(el, catLabels, series, yfmt){
+ const W=720,H=280,pl=54,pr=14,pt=14,pb=30;
+ const iw=W-pl-pr, ih=H-pt-pb, n=catLabels.length;
+ const maxV=Math.max(1,...series.flatMap(s=>s.values.filter(v=>v!=null)));
+ const X=i=> pl+(n<=1?iw/2:iw*i/(n-1));
+ const Y=v=> pt+ih*(1-v/maxV);
+ let g='';
+ [0,.25,.5,.75,1].forEach(t=>{const yy=pt+ih*(1-t);
+   g+=`<line x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`
+     +`<text x="${pl-7}" y="${yy+3}" text-anchor="end" font-size="9" fill="var(--muted)">${yfmt(maxV*t)}</text>`;});
+ let xl=''; const step=n>12?3:1;
+ catLabels.forEach((c,i)=>{ if(i%step===0||i===n-1) xl+=`<text x="${X(i)}" y="${H-9}" text-anchor="middle" font-size="9" fill="var(--muted)">${c}</text>`;});
+ let paths='';
+ series.forEach(s=>{
+   const pts=s.values.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+   paths+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+   s.values.forEach((v,i)=>{paths+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="${s.color}"><title>${s.name} · ${catLabels[i]}: ${yfmt(v)}</title></circle>`;});
  });
- el.innerHTML=h+'</table>';
+ const legend=series.map(s=>`<span style="margin-right:14px;font-size:12px;color:var(--text-secondary);white-space:nowrap"><span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${s.color};margin-right:5px;vertical-align:middle"></span>${s.name}</span>`).join('');
+ el.innerHTML=`<div class="legend" style="margin-bottom:8px">${legend}</div>`
+   +`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" preserveAspectRatio="xMidYMid meet">${g}${xl}${paths}</svg>`;
 }
 function renderMoM(){
  // controls
@@ -534,13 +536,17 @@ function renderMoM(){
  document.querySelectorAll('#mom-metric .pill').forEach(b=>b.onclick=()=>{momMetric=b.dataset.m;renderMoM();});
  const met=MOM_METRICS.find(x=>x.k===momMetric);
  const M=DATA.mom[momCohort];
- document.getElementById('mom-note').innerHTML=`Showing <b>${met.label}</b> for the <b>${momCohort==='all'?'overall':'excl. 4 leaders + offline'}</b> cohort. Darker = higher. `
+ document.getElementById('mom-note').innerHTML=`Showing <b>${met.label}</b> for the <b>${momCohort==='all'?'overall':'excl. 4 leaders + offline'}</b> cohort — one line per month. `
    +(momMetric==='platform_pv'?'Platform = total course-page page views (browse day/hour).'
      :momMetric==='capture'?'Capture can exceed 100% — a session scheduled that day/hour draws views across many browse days (scheduled ≠ browse axis).'
      :'Session metric = sessions <b>scheduled</b> in that month & weekday/hour (from 1 Apr).');
- momHeat(document.getElementById('mom-dow'), M.dow,'day',DOW_FULL,DOW_ABBR,met,52);
+ const dowSeries=MONTHS_JS.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i],
+   values:DOW_FULL.map(d=>{const r=M.dow.find(x=>x.month===m&&x.day===d);return r?met.get(r):0;})}));
+ lineChart(document.getElementById('mom-dow'), DOW_ABBR, dowSeries, met.f);
  const hours=[...Array(24).keys()];
- momHeat(document.getElementById('mom-hour'), M.hour,'hour',hours,hours.map(h=>String(h).padStart(2,'0')),met,30);
+ const hourSeries=MONTHS_JS.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i],
+   values:hours.map(h=>{const r=M.hour.find(x=>x.month===m&&x.hour===h);return r?met.get(r):0;})}));
+ lineChart(document.getElementById('mom-hour'), hours.map(h=>String(h).padStart(2,'0')), hourSeries, met.f);
 }
 
 // tabs
