@@ -112,6 +112,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
 
 <div class="tabs" id="tabs"></div>
 <div class="banner" id="banner"></div>
+<div class="momctrl" style="margin:10px 0 0"><div class="grp"><span class="lbl">Months</span><div class="pillrow" id="monthsel"></div><span class="lbl" style="text-transform:none">affects month-by-month charts</span></div></div>
 
 <div id="std-view">
 <div class="kpis" id="kpis"></div>
@@ -251,13 +252,13 @@ function renderSite(V){
    const idx=S.by_dow[i].index; const s=row.querySelector('.val');
    s.innerHTML=`${fmt(S.by_dow[i].pv)} <span style="color:var(--muted)">· ${idx}</span>`;
  });
- barChart(document.getElementById('site-month'),S.by_month,r=>r.pv,r=>r.month.replace(' 2026',''),css('--s2'),fmt);
+ barChart(document.getElementById('site-month'),S.by_month.filter(r=>monthOK(r.month)),r=>r.pv,r=>r.month.replace(' 2026',''),css('--s2'),fmt);
  // month-on-month line chart: site PV by weekday, one line per month
  const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
  const months=[...new Set(S.matrix.map(m=>m.month))];
  const cell=(m,d)=>{const c=S.matrix.find(x=>x.month===m&&x.day===d); return c?c.pv:0;};
  const siteSeries=months.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i%MONTH_COLORS.length],
-   values:days.map(d=>cell(m,d))}));
+   values:days.map(d=>cell(m,d))})).filter(s=>monthsOn.has(s.name));
  lineChart(document.getElementById('site-heat'), ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], siteSeries, fmt);
  const bd=[...S.by_dow].sort((a,b)=>b.pv-a.pv);
  const bm=[...S.by_month].sort((a,b)=>b.pv-a.pv);
@@ -439,7 +440,7 @@ function render(V, other){
    placeholder:'Search leaders…', noun:'leaders (≥3 sessions)', sortCol:2, sortDir:-1 });
 
  // monthly
- const rows=V.monthly; const mmax=Math.max(...rows.map(r=>r.PV_total));
+ const rows=V.monthly.filter(r=>monthOK(r.key)); const mmax=Math.max(1,...rows.map(r=>r.PV_total));
  let h='<div style="display:flex;align-items:flex-end;gap:3px;height:160px;border-bottom:1px solid var(--baseline)">';
  h+=rows.map(r=>{const ht=mmax>0?Math.max(1,100*r.PV_total/mmax):1;
    return `<div title="${r.key}: ${fmt(r.PV_total)} PV, cart ${pct(r.cart)}, sale ${pct(r.sale)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
@@ -489,11 +490,12 @@ function render(V, other){
 const MONTHS_JS=['Apr 2026','May 2026','Jun 2026','Jul 2026'];
 const DOW_FULL=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const DOW_ABBR=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const pct1=v=>v.toFixed(1)+'%';
 const MOM_METRICS=[
  {k:'platform_pv',label:'Platform PVs',get:r=>r.platform_pv,f:fmt},
  {k:'session_pv', label:'Session PVs', get:r=>r.session_pv, f:fmt},
- {k:'carts',      label:'Add-to-carts',get:r=>r.carts,      f:fmt},
- {k:'sales',      label:'Purchases',   get:r=>r.sales,      f:fmt},
+ {k:'cart_pct',   label:'Add-to-cart %',get:r=>r.session_pv?100*r.carts/r.session_pv:0,f:pct1},
+ {k:'sale_pct',   label:'Purchase %',   get:r=>r.session_pv?100*r.sales/r.session_pv:0,f:pct1},
  {k:'capture',    label:'Capture % (sess PV ÷ platform PV)',get:r=>r.platform_pv?100*r.session_pv/r.platform_pv:0,f:v=>v.toFixed(0)+'%'},
 ];
 let momCohort='all', momMetric='session_pv';
@@ -537,13 +539,29 @@ function renderMoM(){
      :momMetric==='capture'?'Capture can exceed 100% — a session scheduled that day/hour draws views across many browse days (scheduled ≠ browse axis).'
      :'Session metric = sessions <b>scheduled</b> in that month & weekday/hour (from 1 Apr).');
  const dowSeries=MONTHS_JS.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i],
-   values:DOW_FULL.map(d=>{const r=M.dow.find(x=>x.month===m&&x.day===d);return r?met.get(r):0;})}));
+   values:DOW_FULL.map(d=>{const r=M.dow.find(x=>x.month===m&&x.day===d);return r?met.get(r):0;})})).filter(s=>monthsOn.has(s.name));
  lineChart(document.getElementById('mom-dow'), DOW_ABBR, dowSeries, met.f);
  const hours=[...Array(24).keys()];
  const hourSeries=MONTHS_JS.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i],
-   values:hours.map(h=>{const r=M.hour.find(x=>x.month===m&&x.hour===h);return r?met.get(r):0;})}));
+   values:hours.map(h=>{const r=M.hour.find(x=>x.month===m&&x.hour===h);return r?met.get(r):0;})})).filter(s=>monthsOn.has(s.name));
  lineChart(document.getElementById('mom-hour'), hours.map(h=>String(h).padStart(2,'0')), hourSeries, met.f);
 }
+
+// ---- global month selector (month-series charts only) ----
+const MONTH_KEYS=['Apr','May','Jun','Jul'];
+let monthsOn=new Set(MONTH_KEYS);
+const shortOf=s=>{ if(/^\d{4}-\d{2}/.test(s)){return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+s.slice(5,7)];} return String(s).split(' ')[0]; };
+const monthOK=label=>monthsOn.has(shortOf(label));
+function renderMonthSel(){
+ document.getElementById('monthsel').innerHTML=MONTH_KEYS
+   .map(m=>`<button class="pill ${monthsOn.has(m)?'on':''}" data-mo="${m}">${m}</button>`).join('');
+ document.querySelectorAll('#monthsel .pill').forEach(b=>b.onclick=()=>{
+   const m=b.dataset.mo;
+   if(monthsOn.has(m)){ if(monthsOn.size>1) monthsOn.delete(m); } else monthsOn.add(m);
+   renderMonthSel(); refresh();
+ });
+}
+function refresh(){ if(cur==='mom') renderMoM(); else render(DATA[cur], cur==='all'?null:DATA.all); }
 
 // tabs
 let cur='all';
@@ -573,6 +591,7 @@ document.getElementById('tabs').innerHTML=[
  ['mom','Month-on-month','weekday & hour funnel'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
+renderMonthSel();
 setTab('all');
 </script>
 </body>
