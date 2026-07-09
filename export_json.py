@@ -53,6 +53,52 @@ def agg_site(raw):
 SITE_ALL_DOW, SITE_ALL_BLOCK = agg_site(SITE_ALL_RAW)
 SITE_NO4_DOW, SITE_NO4_BLOCK = agg_site(SITE_NO4_RAW)
 
+# ---- Site PV by hour-of-day (IST), excl 4 leaders & offline cohort ----
+SITE_HOUR_NO4_RAW = [
+ ('Apr 2026',0,3899),('Apr 2026',1,3058),('Apr 2026',2,1617),('Apr 2026',3,989),('Apr 2026',4,921),
+ ('Apr 2026',5,1204),('Apr 2026',6,2167),('Apr 2026',7,4453),('Apr 2026',8,6217),('Apr 2026',9,7233),
+ ('Apr 2026',10,8261),('Apr 2026',11,9747),('Apr 2026',12,9636),('Apr 2026',13,9615),('Apr 2026',14,9941),
+ ('Apr 2026',15,9908),('Apr 2026',16,9889),('Apr 2026',17,8641),('Apr 2026',18,8444),('Apr 2026',19,8479),
+ ('Apr 2026',20,9298),('Apr 2026',21,10059),('Apr 2026',22,11134),('Apr 2026',23,8648),
+ ('May 2026',0,5588),('May 2026',1,2884),('May 2026',2,1698),('May 2026',3,1166),('May 2026',4,1146),
+ ('May 2026',5,1863),('May 2026',6,3102),('May 2026',7,4967),('May 2026',8,7193),('May 2026',9,9752),
+ ('May 2026',10,10370),('May 2026',11,11513),('May 2026',12,11240),('May 2026',13,11522),('May 2026',14,11364),
+ ('May 2026',15,11048),('May 2026',16,10586),('May 2026',17,9059),('May 2026',18,8140),('May 2026',19,7992),
+ ('May 2026',20,9400),('May 2026',21,14138),('May 2026',22,17531),('May 2026',23,13913),
+ ('Jun 2026',0,6635),('Jun 2026',1,4283),('Jun 2026',2,2375),('Jun 2026',3,1465),('Jun 2026',4,1502),
+ ('Jun 2026',5,2512),('Jun 2026',6,4199),('Jun 2026',7,7659),('Jun 2026',8,10897),('Jun 2026',9,11159),
+ ('Jun 2026',10,11554),('Jun 2026',11,12344),('Jun 2026',12,13895),('Jun 2026',13,14516),('Jun 2026',14,13908),
+ ('Jun 2026',15,13480),('Jun 2026',16,11524),('Jun 2026',17,9753),('Jun 2026',18,8588),('Jun 2026',19,8742),
+ ('Jun 2026',20,11385),('Jun 2026',21,14855),('Jun 2026',22,18222),('Jun 2026',23,14288),
+ ('Jul 2026',0,2495),('Jul 2026',1,1407),('Jul 2026',2,810),('Jul 2026',3,512),('Jul 2026',4,529),
+ ('Jul 2026',5,766),('Jul 2026',6,1294),('Jul 2026',7,2193),('Jul 2026',8,3208),('Jul 2026',9,3910),
+ ('Jul 2026',10,3937),('Jul 2026',11,4295),('Jul 2026',12,4397),('Jul 2026',13,4391),('Jul 2026',14,4593),
+ ('Jul 2026',15,4200),('Jul 2026',16,3580),('Jul 2026',17,3468),('Jul 2026',18,3348),('Jul 2026',19,3286),
+ ('Jul 2026',20,3530),('Jul 2026',21,4790),('Jul 2026',22,6277),('Jul 2026',23,4519),
+]
+def hour_bucket(h):
+    if h < 9:  return '1 Early AM (<9)'
+    if h < 12: return '2 Late Morning (9-12)'
+    if h < 15: return '3 Afternoon (12-15)'
+    if h < 18: return '4 Late Afternoon (15-18)'
+    if h < 21: return '5 Evening (18-21)'
+    return '6 Night (21+)'
+TIME_ORDER = ['1 Early AM (<9)','2 Late Morning (9-12)','3 Afternoon (12-15)',
+              '4 Late Afternoon (15-18)','5 Evening (18-21)','6 Night (21+)']
+def agg_site_hour(raw):
+    hour, bucket = {}, {}
+    for m,h,v in raw:
+        hour[h] = hour.get(h,0)+v
+        bucket[hour_bucket(h)] = bucket.get(hour_bucket(h),0)+v
+    avg = sum(bucket.values())/len(bucket)
+    block = {
+        'by_hour':   [{'hour':h,'pv':hour.get(h,0)} for h in range(24)],
+        'by_bucket': [{'key':b,'pv':bucket[b],'index':round(100*bucket[b]/avg,1)} for b in TIME_ORDER],
+        'total':     sum(hour.values()),
+    }
+    return bucket, block
+SITE_NO4_TBUCKET, SITE_NO4_TIME_BLOCK = agg_site_hour(SITE_HOUR_NO4_RAW)
+
 def session_list(sub):
     top = sub.sort_values('PV', ascending=False).head(5)
     return [{
@@ -62,7 +108,8 @@ def session_list(sub):
         'date':str(r['startIST'])[:16] if pd.notna(r.get('startIST')) else ''
     } for _,r in top.iterrows()]
 
-def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all'):
+def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all',
+          site_tbucket=None, site_time_block=None):
     # PV universe = sessions from 1 Apr onward; keyword universe = ALL dates
     pv = df[df['startIST'] >= CUTOFF].copy()
 
@@ -104,6 +151,19 @@ def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all')
         r['demand_index'] = round(100*r['pv_per_1k_site']/navg,1) if (navg and r['pv_per_1k_site'] is not None) else None
     d['site_pv'] = site_block
     d['site_scope'] = site_scope
+
+    # Normalize session demand by site traffic in each time-of-day bucket (when available)
+    if site_tbucket:
+        tnorms=[]
+        for r in d['time']:
+            sp = site_tbucket.get(r['key'])
+            r['site_pv'] = sp
+            r['pv_per_1k_site'] = round(1000.0*r['PV_total']/sp, 2) if sp else None
+            if r['pv_per_1k_site'] is not None: tnorms.append(r['pv_per_1k_site'])
+        tavg = sum(tnorms)/len(tnorms) if tnorms else None
+        for r in d['time']:
+            r['demand_index'] = round(100*r['pv_per_1k_site']/tavg,1) if (tavg and r['pv_per_1k_site'] is not None) else None
+    d['site_time'] = site_time_block
 
     dd = pv.copy()
     dd['wordq'] = pd.qcut(dd['name_len_words'], 4, duplicates='drop')
@@ -165,9 +225,12 @@ no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
 online_no4 = no4[no4['type'] != 'OFFLINE'].copy()
 out = {
     'all': build(df, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all'),
-    'filtered': build(no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
-    'online_clean': build(online_no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
-    'online_single': build(online_no4, single_kw=True, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
+    'filtered': build(no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
+                      site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
+    'online_clean': build(online_no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
+                      site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
+    'online_single': build(online_no4, single_kw=True, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
+                      site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
     'excluded_leaders': EXCLUDE,
     'cutoff': '2026-04-01',
 }

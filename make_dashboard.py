@@ -150,6 +150,14 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="time-pv"></div></div>
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="time-rate" class="dual"></div></div>
 </div>
+<div class="card" id="time-norm-card">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Session demand <b>normalized by site traffic</b> in that window — demand index (100 = average window). <span style="color:var(--muted)">Caveat: session time = scheduled start; site traffic = browse hour.</span></div>
+  <div id="time-norm"></div>
+</div>
+<div class="card" id="site-hour-card">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Site traffic by <b>hour of day</b> (IST, browse hour) — overall course pages, excl. 4 leaders & offline</div>
+  <div id="site-hour"></div>
+</div>
 
 <h2>6 · Session name <span class="sub">length & theme keywords</span></h2>
 <div id="ins-name"></div>
@@ -189,6 +197,18 @@ function indexBars(el,rows,valFn,labFn,fmtFn){
    <div class="track"><div class="bar" style="width:${w}%;background:${col}"></div>
    <span class="val">${fmtFn(v)}</span></div></div>`;
  }).join('');
+}
+// vertical hourly bar chart (0-23), peak highlighted
+function hourCurve(el,byHour){
+ const max=Math.max(...byHour.map(x=>x.pv));
+ let h='<div style="display:flex;align-items:flex-end;gap:2px;height:130px;border-bottom:1px solid var(--baseline)">';
+ h+=byHour.map(x=>{const ht=max>0?Math.max(1,100*x.pv/max):1; const peak=x.pv===max;
+   return `<div title="${String(x.hour).padStart(2,'0')}:00 IST — ${x.pv.toLocaleString()} PV" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+     <div style="background:${peak?'var(--s3)':'var(--s1)'};height:${ht}%;border-radius:2px 2px 0 0;min-height:1px"></div></div>`;}).join('');
+ h+='</div><div style="display:flex;gap:2px;margin-top:3px">';
+ h+=byHour.map(x=>`<div class="axis" style="flex:1;text-align:center;font-size:8px">${x.hour%3===0?String(x.hour).padStart(2,'0'):''}</div>`).join('');
+ h+='</div>';
+ el.innerHTML=h;
 }
 // month x dow heatmap for site PV (S = this tab's matched baseline)
 function renderSite(V){
@@ -362,6 +382,14 @@ function render(V, other){
  renderSite(V);  // site-traffic section — baseline matches this tab's cohort
  barChart(document.getElementById('time-pv'),V.time,r=>r.PV_total,r=>cleanKey(r.key),css('--s1'),fmt);
  dualChart(document.getElementById('time-rate'),V.time,r=>cleanKey(r.key));
+ // time-of-day normalization + hourly site curve (only when this tab has matching site data)
+ const tnCard=document.getElementById('time-norm-card'), shCard=document.getElementById('site-hour-card');
+ if(V.site_time){
+   tnCard.style.display=''; shCard.style.display='';
+   indexBars(document.getElementById('time-norm'),V.time.filter(r=>r.demand_index!=null),
+     r=>r.demand_index,r=>cleanKey(r.key),v=>v.toFixed(0));
+   hourCurve(document.getElementById('site-hour'),V.site_time.by_hour);
+ }else{ tnCard.style.display='none'; shCard.style.display='none'; }
  dualChart(document.getElementById('word-rate'),V.wordq,wordLab);
 
  tableize(document.getElementById('type-tbl'),V.type,[
@@ -416,7 +444,14 @@ function render(V, other){
  ins('ins-dow',`<b>Weekdays convert better; weekends draw browsing.</b> Weekday conversion ≈ <b>${wds.toFixed(2)}%</b> vs weekend ≈ <b>${ws.toFixed(2)}%</b>. Best add-to-cart is <b>${bestDayCart.key}</b> (${pct(bestDayCart.cart)}); best conversion is <b>${bestDaySale.key}</b> (${pct(bestDaySale.sale)}).${idxTxt}`);
 
  const volTime=maxBy(V.time,r=>r.PV_total), bestTimeSale=maxBy(V.time,r=>r.sale||0);
- ins('ins-time',`<b>${cleanKey(volTime.key)} drives volume; ${cleanKey(bestTimeSale.key)} converts hardest.</b> The ${cleanKey(volTime.key)} window holds the most demand (${fmt(volTime.PV_total)} PV), while <b>${cleanKey(bestTimeSale.key)}</b> has the best conversion (${pct(bestTimeSale.sale)}) — a smaller, high-intent audience.`);
+ let timeNorm='';
+ if(V.site_time){
+   const tIdx=V.time.filter(r=>r.demand_index!=null);
+   const topT=tIdx.length?maxBy(tIdx,r=>r.demand_index):null;
+   const sitePeak=[...V.site_time.by_bucket].sort((a,b)=>b.pv-a.pv)[0];
+   if(topT) timeNorm=` <b>Normalized by site traffic</b>, the <b>${cleanKey(topT.key)}</b> window is the most efficient (index ${topT.demand_index.toFixed(0)}) — even though the site is busiest in the <b>${cleanKey(sitePeak.key)}</b> window (browse hour ≠ scheduled slot).`;
+ }
+ ins('ins-time',`<b>${cleanKey(volTime.key)} drives volume; ${cleanKey(bestTimeSale.key)} converts hardest.</b> The ${cleanKey(volTime.key)} window holds the most demand (${fmt(volTime.PV_total)} PV), while <b>${cleanKey(bestTimeSale.key)}</b> has the best conversion (${pct(bestTimeSale.sale)}) — a smaller, high-intent audience.${timeNorm}`);
 
  const shortW=V.wordq[0], longW=V.wordq[V.wordq.length-1];
  const topKw=[...V.keywords].filter(k=>k.n>=15).sort((a,b)=>b.sale-a.sale).slice(0,5).map(k=>k.key).join(', ');
