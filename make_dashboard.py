@@ -155,7 +155,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div id="time-norm"></div>
 </div>
 <div class="card" id="site-hour-card">
-  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Site traffic by <b>hour of day</b> (IST, browse hour) — overall course pages, excl. 4 leaders & offline</div>
+  <div id="site-hour-note" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
   <div id="site-hour"></div>
 </div>
 
@@ -388,6 +388,8 @@ function render(V, other){
    tnCard.style.display=''; shCard.style.display='';
    indexBars(document.getElementById('time-norm'),V.time.filter(r=>r.demand_index!=null),
      r=>r.demand_index,r=>cleanKey(r.key),v=>v.toFixed(0));
+   document.getElementById('site-hour-note').innerHTML='Site traffic by <b>hour of day</b> (IST, browse hour) — overall course pages, '
+     + (V.site_scope==='no4'?'excl. 4 leaders & offline':'all leaders & types')+'. Peak hour in orange.';
    hourCurve(document.getElementById('site-hour'),V.site_time.by_hour);
  }else{ tnCard.style.display='none'; shCard.style.display='none'; }
  dualChart(document.getElementById('word-rate'),V.wordq,wordLab);

@@ -99,6 +99,31 @@ def agg_site_hour(raw):
     return bucket, block
 SITE_NO4_TBUCKET, SITE_NO4_TIME_BLOCK = agg_site_hour(SITE_HOUR_NO4_RAW)
 
+# ---- Site PV by hour-of-day (IST), OVERALL cohort (all leaders & types) ----
+SITE_HOUR_ALL_RAW = [
+ ('Apr 2026',0,5924),('Apr 2026',1,4375),('Apr 2026',2,2480),('Apr 2026',3,1480),('Apr 2026',4,1331),
+ ('Apr 2026',5,1781),('Apr 2026',6,3303),('Apr 2026',7,6796),('Apr 2026',8,9438),('Apr 2026',9,10751),
+ ('Apr 2026',10,11953),('Apr 2026',11,13940),('Apr 2026',12,13994),('Apr 2026',13,13524),('Apr 2026',14,14098),
+ ('Apr 2026',15,14537),('Apr 2026',16,14577),('Apr 2026',17,12896),('Apr 2026',18,12172),('Apr 2026',19,11992),
+ ('Apr 2026',20,12922),('Apr 2026',21,13865),('Apr 2026',22,15358),('Apr 2026',23,12140),
+ ('May 2026',0,10336),('May 2026',1,5592),('May 2026',2,3120),('May 2026',3,1953),('May 2026',4,1766),
+ ('May 2026',5,2566),('May 2026',6,4354),('May 2026',7,7098),('May 2026',8,10710),('May 2026',9,14420),
+ ('May 2026',10,15680),('May 2026',11,16971),('May 2026',12,17431),('May 2026',13,17125),('May 2026',14,17411),
+ ('May 2026',15,17374),('May 2026',16,17297),('May 2026',17,14662),('May 2026',18,13202),('May 2026',19,12897),
+ ('May 2026',20,14665),('May 2026',21,20155),('May 2026',22,24559),('May 2026',23,20781),
+ ('Jun 2026',0,12052),('Jun 2026',1,7620),('Jun 2026',2,4165),('Jun 2026',3,2510),('Jun 2026',4,2431),
+ ('Jun 2026',5,3727),('Jun 2026',6,6642),('Jun 2026',7,11864),('Jun 2026',8,16973),('Jun 2026',9,17937),
+ ('Jun 2026',10,19233),('Jun 2026',11,19832),('Jun 2026',12,21729),('Jun 2026',13,22559),('Jun 2026',14,21857),
+ ('Jun 2026',15,21352),('Jun 2026',16,20090),('Jun 2026',17,17149),('Jun 2026',18,15464),('Jun 2026',19,15851),
+ ('Jun 2026',20,18675),('Jun 2026',21,22410),('Jun 2026',22,26994),('Jun 2026',23,22457),
+ ('Jul 2026',0,5200),('Jul 2026',1,2929),('Jul 2026',2,1739),('Jul 2026',3,1081),('Jul 2026',4,1061),
+ ('Jul 2026',5,1481),('Jul 2026',6,2644),('Jul 2026',7,4663),('Jul 2026',8,5798),('Jul 2026',9,6424),
+ ('Jul 2026',10,6534),('Jul 2026',11,7176),('Jul 2026',12,7412),('Jul 2026',13,7335),('Jul 2026',14,7863),
+ ('Jul 2026',15,6967),('Jul 2026',16,6420),('Jul 2026',17,5984),('Jul 2026',18,5655),('Jul 2026',19,6219),
+ ('Jul 2026',20,6381),('Jul 2026',21,8121),('Jul 2026',22,11268),('Jul 2026',23,8132),
+]
+SITE_ALL_TBUCKET, SITE_ALL_TIME_BLOCK = agg_site_hour(SITE_HOUR_ALL_RAW)
+
 def session_list(sub):
     top = sub.sort_values('PV', ascending=False).head(5)
     return [{
@@ -224,7 +249,8 @@ df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
 online_no4 = no4[no4['type'] != 'OFFLINE'].copy()
 out = {
-    'all': build(df, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all'),
+    'all': build(df, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all',
+                 site_tbucket=SITE_ALL_TBUCKET, site_time_block=SITE_ALL_TIME_BLOCK),
     'filtered': build(no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
                       site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
     'online_clean': build(online_no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
