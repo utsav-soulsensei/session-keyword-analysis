@@ -469,19 +469,15 @@ function setTab(k){
  const b=document.getElementById('banner');
  const n=x=>DATA[x].overall.sessions.toLocaleString();
  const BAN={
-  all:`Showing <b>all ${n('all')}</b> tracked sessions — every type and leader included.`,
-  filtered:`Showing <b>${n('filtered')}</b> sessions — <b>excluding 4 high-volume leaders</b> (${EXCL.join(', ')}) who together drove ~30% of all page views. The "typical session" view, undistorted by the biggest names.`,
-  online_clean:`Showing <b>${n('online_clean')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b>. The most conservative baseline: what a standard online session, run by a non-star leader, actually does. Keywords here are <b>multi-tagged</b> (a session counts under every theme word in its name).`,
-  online_single:`Same cut as the previous tab (<b>${n('online_single')}</b> online sessions, excl. 4 leaders) — but each session is filed under its <b>single main theme</b> with short titles, so themes are mutually exclusive and comparable. Use this tab to see which <b>one</b> theme truly drives demand & conversion.`,
+  all:`Showing <b>all ${n('all')}</b> sessions (page-view sections from 1 Apr) — <b>every leader and type</b> included. Each session is filed under its <b>single main theme</b>.`,
+  online_single:`Showing <b>${n('online_single')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b> (${EXCL.join(', ')}). The clean baseline: what a standard online session by a non-star leader does. Each session under its <b>single main theme</b>.`,
  };
  b.innerHTML=BAN[k];
  window.scrollTo({top:0,behavior:'instant'});
 }
 document.getElementById('tabs').innerHTML=[
  ['all','All sessions',DATA.all.overall.sessions+' sessions'],
- ['filtered','Excluding 4 outlier leaders',DATA.filtered.overall.sessions+' sessions'],
- ['online_clean','Online, excl. 4 (multi-tag)',DATA.online_clean.overall.sessions+' sessions'],
- ['online_single','Online, excl. 4 (main theme)',DATA.online_single.overall.sessions+' sessions'],
+ ['online_single','Without 4 leaders + offline',DATA.online_single.overall.sessions+' sessions'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
 setTab('all');

@@ -249,12 +249,9 @@ df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
 online_no4 = no4[no4['type'] != 'OFFLINE'].copy()
 out = {
-    'all': build(df, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all',
+    # Both tabs use the single main-keyword format; they differ only in cohort.
+    'all': build(df, single_kw=True, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all',
                  site_tbucket=SITE_ALL_TBUCKET, site_time_block=SITE_ALL_TIME_BLOCK),
-    'filtered': build(no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
-                      site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
-    'online_clean': build(online_no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
-                      site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
     'online_single': build(online_no4, single_kw=True, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4',
                       site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
     'excluded_leaders': EXCLUDE,
@@ -263,7 +260,7 @@ out = {
 with open('dashboard_data.json','w') as f:
     json.dump(out,f,indent=1)
 print('wrote dashboard_data.json (PV sections from 1 Apr; keywords all-dates)')
-for k in ['all','filtered','online_clean','online_single']:
+for k in ['all','online_single']:
     o=out[k]['overall']
     print(f"{k:14s}: PV-sessions={o['sessions']:4d} (all={o['sessions_all']:4d})  PV={o['PV_total']:>7d}  cart={o['cart']:.2f}%  sale={o['sale']:.2f}%  site={out[k]['site_scope']}")
 print('SITE_ALL DOW index:', {r['day'][:3]:r['index'] for r in SITE_ALL_BLOCK['by_dow']})
