@@ -244,6 +244,31 @@ def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all',
     d['monthly']=sorted(mt,key=lambda r:r['key'])
     return d
 
+def mom_block(dfc, site_dow_raw, site_hour_raw):
+    """Month-on-month: platform PV + session funnel (PV/carts/sales) by month x DOW and x hour."""
+    pv = dfc[dfc['startIST'] >= CUTOFF].copy()
+    pv['mlabel'] = pv['startIST'].dt.strftime('%b %Y')
+    sdow, shour = {}, {}
+    for (m,day),sub in pv.groupby(['mlabel','dow_name']):
+        sdow[(m,day)] = (sub['PV'].sum(), sub['carts'].sum(), sub['sales'].sum())
+    for (m,h),sub in pv.groupby(['mlabel','hour']):
+        shour[(m,int(h))] = (sub['PV'].sum(), sub['carts'].sum(), sub['sales'].sum())
+    plat_dow  = {(m,d):v for m,d,v in site_dow_raw}
+    plat_hour = {(m,h):v for m,h,v in site_hour_raw}
+    dow_rows=[]
+    for m in MONTH_ORDER:
+        for d in DOW_ORDER:
+            s=sdow.get((m,d),(0,0,0))
+            dow_rows.append({'month':m,'day':d,'platform_pv':int(plat_dow.get((m,d),0)),
+                             'session_pv':int(s[0]),'carts':int(round(s[1])),'sales':int(round(s[2]))})
+    hour_rows=[]
+    for m in MONTH_ORDER:
+        for h in range(24):
+            s=shour.get((m,h),(0,0,0))
+            hour_rows.append({'month':m,'hour':h,'platform_pv':int(plat_hour.get((m,h),0)),
+                              'session_pv':int(s[0]),'carts':int(round(s[1])),'sales':int(round(s[2]))})
+    return {'dow':dow_rows,'hour':hour_rows}
+
 df = pd.read_csv('merged_analysis.csv')
 df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
@@ -256,6 +281,10 @@ out = {
                       site_tbucket=SITE_NO4_TBUCKET, site_time_block=SITE_NO4_TIME_BLOCK),
     'excluded_leaders': EXCLUDE,
     'cutoff': '2026-04-01',
+    'mom': {
+        'all': mom_block(df, SITE_ALL_RAW, SITE_HOUR_ALL_RAW),
+        'no4': mom_block(online_no4, SITE_NO4_RAW, SITE_HOUR_NO4_RAW),
+    },
 }
 with open('dashboard_data.json','w') as f:
     json.dump(out,f,indent=1)

@@ -36,6 +36,17 @@ header p{color:var(--text-secondary);margin:0 0 4px;font-size:14px;}
   border-bottom:2px solid transparent;margin-bottom:-1px;}
 .tab.on{color:var(--text-primary);border-bottom-color:var(--s1);}
 .tab .c{font-weight:400;font-size:11px;color:var(--muted);display:block;margin-top:1px;}
+.momctrl{display:flex;gap:22px;flex-wrap:wrap;align-items:center;margin:16px 0 4px;}
+.momctrl .grp{display:flex;align-items:center;gap:7px;}
+.momctrl .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}
+.pillrow{display:inline-flex;gap:3px;background:var(--surface-1);border:1px solid var(--border);border-radius:9px;padding:3px;}
+.pill{border:none;background:none;font:inherit;font-size:12.5px;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--text-secondary);white-space:nowrap;}
+.pill.on{background:var(--s1);color:#fff;}
+.heatwrap{overflow-x:auto;}
+.heat{border-collapse:separate;border-spacing:3px;}
+.heat td,.heat th{text-align:center;font-variant-numeric:tabular-nums;}
+.heat .rk{font-size:11px;color:var(--text-secondary);text-align:left;white-space:nowrap;padding-right:6px;}
+.heat .ch{font-size:10px;color:var(--muted);font-weight:600;}
 .banner{font-size:12.5px;color:var(--text-secondary);background:var(--surface-1);
   border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:12px 0 4px;}
 h2{font-size:15px;margin:36px 0 4px;letter-spacing:-0.01em;}
@@ -50,13 +61,13 @@ h2 .sub{font-weight:400;color:var(--muted);font-size:12px;margin-left:8px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 @media(max-width:760px){.grid2{grid-template-columns:1fr}}
 .row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px;}
-.row .name{width:150px;flex:0 0 150px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.row .name{width:182px;flex:0 0 182px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .row .track{flex:1;display:flex;align-items:center;gap:8px;}
 .bar{height:16px;border-radius:0 4px 4px 0;min-width:2px;}
 .row .val{font-variant-numeric:tabular-nums;color:var(--text-primary);font-size:12px;}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin:2px 0 10px;flex-wrap:wrap;}
 .legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle;}
-.dual .name{width:130px;flex-basis:130px;}
+.dual .name{width:172px;flex:0 0 172px;}
 table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:4px;}
 th,td{text-align:right;padding:6px 10px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums;}
 th:first-child,td:first-child{text-align:left;font-variant-numeric:normal;}
@@ -106,6 +117,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
 <div class="tabs" id="tabs"></div>
 <div class="banner" id="banner"></div>
 
+<div id="std-view">
 <div class="kpis" id="kpis"></div>
 
 <h2>The funnel <span class="sub">page view → add to cart → purchase</span></h2>
@@ -175,6 +187,19 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
 
 <h2>8 · Demand trend over time <span class="sub">monthly, by session start month (IST) · from Apr 2026</span></h2>
 <div class="card"><div id="month-chart"></div></div>
+</div><!-- /std-view -->
+
+<div id="mom-view" style="display:none">
+  <div class="momctrl">
+    <div class="grp"><span class="lbl">Cohort</span><div class="pillrow" id="mom-cohort"></div></div>
+    <div class="grp"><span class="lbl">Metric</span><div class="pillrow" id="mom-metric"></div></div>
+  </div>
+  <div id="mom-note" style="font-size:12px;color:var(--muted);margin:6px 0 4px"></div>
+  <h2>Day of week — month on month <span class="sub">rows = month · columns = weekday</span></h2>
+  <div class="card"><div class="heatwrap"><div id="mom-dow"></div></div></div>
+  <h2>Hour of day — month on month <span class="sub">rows = month · columns = hour (IST)</span></h2>
+  <div class="card"><div class="heatwrap"><div id="mom-hour"></div></div></div>
+</div><!-- /mom-view -->
 
 <div class="foot">Sheet1 (funnel) + Sheet2 (course info), joined on instance id · rates are PV-weighted</div>
 </div>
@@ -186,6 +211,16 @@ const fmt=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':(''+Math.round(n));
 const pct=n=>n==null?'—':n.toFixed(2)+'%';
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 const cleanKey=k=>k.replace(/^\d+\s/,'').replace(/\(.*?\)/,'').trim()||k;
+// time-of-day label with its IST hour-range definition, e.g. "Evening (6–9pm)"
+const TIME_DEF={
+ '1 Early AM (<9)':'Early AM (before 9am)',
+ '2 Late Morning (9-12)':'Late Morning (9am–12pm)',
+ '3 Afternoon (12-15)':'Afternoon (12–3pm)',
+ '4 Late Afternoon (15-18)':'Late Afternoon (3–6pm)',
+ '5 Evening (18-21)':'Evening (6–9pm)',
+ '6 Night (21+)':'Night (9pm+)',
+};
+const timeLab=k=>TIME_DEF[k]||cleanKey(k);
 
 // index bars centered on 100 (above avg = blue, below = orange)
 function indexBars(el,rows,valFn,labFn,fmtFn){
@@ -242,13 +277,14 @@ function renderSite(V){
    : 'This is the <b>overall</b> course-page benchmark (every leader & type), matching the “All sessions” tab.';
  ins('ins-site',`<b>The site is busiest mid-week and quietest on weekends.</b> <b>${bd[0].day}</b> pulls the most course-page traffic (index ${bd[0].index}), while <b>${bd[bd.length-1].day}</b> is lowest (${bd[bd.length-1].index}). By month, <b>${bm[0].month}</b> peaked (${fmt(bm[0].pv)} PV); ${bm[bm.length-1].month} is lowest/partial. ${scopeTxt} This is <i>browse-day</i> traffic — a scheduling & promotion benchmark, not tied to any one session.`);
 }
-function barChart(el,rows,valFn,labFn,color,fmtFn){
+function barChart(el,rows,valFn,labFn,color,fmtFn,suffixFn){
  const max=Math.max(...rows.map(valFn));
  el.innerHTML=rows.map(r=>{
    const v=valFn(r); const w=max>0?Math.max(0.5,100*v/max):0;
+   const suf=suffixFn?` <span style="color:var(--muted)">${suffixFn(r)}</span>`:'';
    return `<div class="row"><div class="name" title="${labFn(r)}">${labFn(r)}</div>
    <div class="track"><div class="bar" style="width:${w}%;background:${color}"></div>
-   <span class="val">${fmtFn(v)}</span></div></div>`;
+   <span class="val">${fmtFn(v)}${suf}</span></div></div>`;
  }).join('');
 }
 function dualChart(el,rows,labFn){
@@ -374,20 +410,20 @@ function render(V, other){
  const priceRows=V.price_tier.filter(r=>r.PV_total>0);
  barChart(document.getElementById('price-pv'),priceRows,r=>r.PV_total,r=>r.key+' ₹',css('--s1'),fmt);
  dualChart(document.getElementById('price-rate'),priceRows,r=>r.key+' ₹');
- barChart(document.getElementById('dow-pv'),V.dow,r=>r.PV_total,r=>r.key,css('--s1'),fmt);
+ barChart(document.getElementById('dow-pv'),V.dow,r=>r.PV_total,r=>r.key,css('--s1'),fmt,r=>'('+r.n+')');
  dualChart(document.getElementById('dow-rate'),V.dow,r=>r.key.slice(0,3));
  // normalized: session demand per unit site traffic (index, 100 = avg day)
  indexBars(document.getElementById('dow-norm'),V.dow.filter(r=>r.demand_index!=null),
    r=>r.demand_index,r=>r.key,v=>v.toFixed(0));
  renderSite(V);  // site-traffic section — baseline matches this tab's cohort
- barChart(document.getElementById('time-pv'),V.time,r=>r.PV_total,r=>cleanKey(r.key),css('--s1'),fmt);
- dualChart(document.getElementById('time-rate'),V.time,r=>cleanKey(r.key));
+ barChart(document.getElementById('time-pv'),V.time,r=>r.PV_total,r=>timeLab(r.key),css('--s1'),fmt,r=>'('+r.n+')');
+ dualChart(document.getElementById('time-rate'),V.time,r=>timeLab(r.key));
  // time-of-day normalization + hourly site curve (only when this tab has matching site data)
  const tnCard=document.getElementById('time-norm-card'), shCard=document.getElementById('site-hour-card');
  if(V.site_time){
    tnCard.style.display=''; shCard.style.display='';
    indexBars(document.getElementById('time-norm'),V.time.filter(r=>r.demand_index!=null),
-     r=>r.demand_index,r=>cleanKey(r.key),v=>v.toFixed(0));
+     r=>r.demand_index,r=>timeLab(r.key),v=>v.toFixed(0));
    document.getElementById('site-hour-note').innerHTML='Site traffic by <b>hour of day</b> (IST, browse hour) — overall course pages, '
      + (V.site_scope==='no4'?'excl. 4 leaders & offline':'all leaders & types')+'. Peak hour in orange.';
    hourCurve(document.getElementById('site-hour'),V.site_time.by_hour);
@@ -460,24 +496,79 @@ function render(V, other){
  ins('ins-name',`<b>Short, concrete names convert better.</b> Shortest names (${wordLab(shortW)}) convert at <b>${pct(shortW.sale)}</b> vs longest (${wordLab(longW)}) at <b>${pct(longW.sale)}</b>. Highest-converting themes: <b>${topKw}</b>.`);
 }
 
+// ---- Month-on-month tab ----
+const MONTHS_JS=['Apr 2026','May 2026','Jun 2026','Jul 2026'];
+const DOW_FULL=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DOW_ABBR=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const MOM_METRICS=[
+ {k:'platform_pv',label:'Platform PVs',get:r=>r.platform_pv,f:fmt},
+ {k:'session_pv', label:'Session PVs', get:r=>r.session_pv, f:fmt},
+ {k:'carts',      label:'Add-to-carts',get:r=>r.carts,      f:fmt},
+ {k:'sales',      label:'Purchases',   get:r=>r.sales,      f:fmt},
+ {k:'capture',    label:'Capture % (sess PV ÷ platform PV)',get:r=>r.platform_pv?100*r.session_pv/r.platform_pv:0,f:v=>v.toFixed(0)+'%'},
+];
+let momCohort='all', momMetric='session_pv';
+
+function momHeat(el, rows, field, colKeys, colLabels, met, minw){
+ const map={}; rows.forEach(r=>map[r.month+'|'+r[field]]=r);
+ const mx=Math.max(...rows.map(met.get),1);
+ let h='<table class="heat"><tr><th></th>'+colLabels.map(c=>`<th class="ch">${c}</th>`).join('')+'</tr>';
+ MONTHS_JS.forEach(m=>{
+   h+=`<tr><td class="rk">${m.replace(' 2026','')}</td>`;
+   colKeys.forEach(ck=>{
+     const r=map[m+'|'+ck]; const v=r?met.get(r):0;
+     const a=v>0?(0.10+0.90*v/mx):0;
+     h+=`<td title="${m} · ${ck}: ${met.f(v)}" style="background:color-mix(in srgb, var(--s1) ${Math.round(a*100)}%, transparent);color:var(--text-primary);font-size:10.5px;padding:7px 4px;border-radius:4px;min-width:${minw}px">${v>0?met.f(v):'·'}</td>`;
+   });
+   h+='</tr>';
+ });
+ el.innerHTML=h+'</table>';
+}
+function renderMoM(){
+ // controls
+ document.getElementById('mom-cohort').innerHTML=[['all','Overall'],['no4','Without 4 + offline']]
+   .map(c=>`<button class="pill ${momCohort===c[0]?'on':''}" data-c="${c[0]}">${c[1]}</button>`).join('');
+ document.getElementById('mom-metric').innerHTML=MOM_METRICS
+   .map(m=>`<button class="pill ${momMetric===m.k?'on':''}" data-m="${m.k}">${m.label.split(' (')[0]}</button>`).join('');
+ document.querySelectorAll('#mom-cohort .pill').forEach(b=>b.onclick=()=>{momCohort=b.dataset.c;renderMoM();});
+ document.querySelectorAll('#mom-metric .pill').forEach(b=>b.onclick=()=>{momMetric=b.dataset.m;renderMoM();});
+ const met=MOM_METRICS.find(x=>x.k===momMetric);
+ const M=DATA.mom[momCohort];
+ document.getElementById('mom-note').innerHTML=`Showing <b>${met.label}</b> for the <b>${momCohort==='all'?'overall':'excl. 4 leaders + offline'}</b> cohort. Darker = higher. `
+   +(momMetric==='platform_pv'?'Platform = total course-page page views (browse day/hour).'
+     :momMetric==='capture'?'Capture can exceed 100% — a session scheduled that day/hour draws views across many browse days (scheduled ≠ browse axis).'
+     :'Session metric = sessions <b>scheduled</b> in that month & weekday/hour (from 1 Apr).');
+ momHeat(document.getElementById('mom-dow'), M.dow,'day',DOW_FULL,DOW_ABBR,met,52);
+ const hours=[...Array(24).keys()];
+ momHeat(document.getElementById('mom-hour'), M.hour,'hour',hours,hours.map(h=>String(h).padStart(2,'0')),met,30);
+}
+
 // tabs
 let cur='all';
 function setTab(k){
  cur=k;
  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.k===k));
- render(DATA[k], k==='all'?null:DATA.all);   // deltas baselined to All sessions
+ const sv=document.getElementById('std-view'), mv=document.getElementById('mom-view');
  const b=document.getElementById('banner');
  const n=x=>DATA[x].overall.sessions.toLocaleString();
- const BAN={
-  all:`Showing <b>all ${n('all')}</b> sessions (page-view sections from 1 Apr) — <b>every leader and type</b> included. Each session is filed under its <b>single main theme</b>.`,
-  online_single:`Showing <b>${n('online_single')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b> (${EXCL.join(', ')}). The clean baseline: what a standard online session by a non-star leader does. Each session under its <b>single main theme</b>.`,
- };
- b.innerHTML=BAN[k];
+ if(k==='mom'){
+   sv.style.display='none'; mv.style.display=''; renderMoM();
+   b.innerHTML=`<b>Month-on-month funnel</b> by weekday and hour, Apr–Jul 2026. Toggle cohort and metric below. Platform PVs are browse-time; session metrics are by scheduled start.`;
+ }else{
+   sv.style.display=''; mv.style.display='none';
+   render(DATA[k], k==='all'?null:DATA.all);   // deltas baselined to All sessions
+   const BAN={
+    all:`Showing <b>all ${n('all')}</b> sessions (page-view sections from 1 Apr) — <b>every leader and type</b> included. Each session is filed under its <b>single main theme</b>.`,
+    online_single:`Showing <b>${n('online_single')}</b> sessions — <b>online only (OFFLINE removed) and excluding the 4 outlier leaders</b> (${EXCL.join(', ')}). The clean baseline: what a standard online session by a non-star leader does. Each session under its <b>single main theme</b>.`,
+   };
+   b.innerHTML=BAN[k];
+ }
  window.scrollTo({top:0,behavior:'instant'});
 }
 document.getElementById('tabs').innerHTML=[
  ['all','All sessions',DATA.all.overall.sessions+' sessions'],
  ['online_single','Without 4 leaders + offline',DATA.online_single.overall.sessions+' sessions'],
+ ['mom','Month-on-month','weekday & hour funnel'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
 setTab('all');
