@@ -18,6 +18,18 @@ sessions don't distort the picture.
 > Timestamps in the source are **UTC**; the pipeline converts them to **IST (+5:30)**
 > before any day/time analysis.
 
+**Scope of each view**
+
+- Every **page-view section** (funnel, price, type, day, time, name-length, leaders,
+  monthly) uses only sessions dated **from 1 Apr 2026 onward** — page views
+  concentrate on open-enrollment sessions, so older dates are noise.
+- The **keyword / theme tables use all available dates.**
+- A **site-traffic benchmark** (overall course-page page views by day-of-week and
+  month, Apr–Jul 2026) provides a browse-day baseline. It ships in two cohorts —
+  overall, and excluding the 4 outlier leaders + offline — and each tab uses the
+  matching one to compute a **normalized demand index** (session PV per unit of
+  site traffic). Caveat: session day = scheduled start; site traffic = browse day.
+
 ## The dashboard
 
 `Session Demand Dashboard.html` — a self-contained, single-file dashboard (no build

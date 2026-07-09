@@ -99,7 +99,8 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <p>What drives demand (page views), add-to-cart, and conversion</p>
   <p class="note"><b>How to read this.</b> <b>Demand</b> = page views (PV). <b>Add-to-cart</b> and <b>Conversion</b> are <i>volume-weighted rates</i>
   (total carts / sales ÷ total page views for the group), so tiny sessions can't distort them. Times are <b>IST</b> (source is UTC).
-  Page views concentrate on upcoming sessions open for enrollment.</p>
+  <b>All page-view sections use sessions dated from 1 Apr 2026 onward</b> (page views concentrate on open-enrollment sessions);
+  the <b>keyword/theme tables use all available dates</b>.</p>
 </header>
 
 <div class="tabs" id="tabs"></div>
@@ -121,21 +122,36 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
 <div id="ins-type"></div>
 <div class="card"><div id="type-tbl"></div></div>
 
-<h2>3 · Day of week</h2>
+<h2>3 · Day of week <span class="sub">by session's scheduled start day</span></h2>
 <div id="ins-dow"></div>
 <div class="grid2">
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="dow-pv"></div></div>
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="dow-rate" class="dual"></div></div>
 </div>
+<div class="card">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Session demand <b>normalized by site traffic</b> that weekday — demand index (100 = average day). <span style="color:var(--muted)">Caveat: session day = scheduled start; site traffic = browse day.</span></div>
+  <div id="dow-norm"></div>
+</div>
 
-<h2>4 · Time of day <span class="sub">IST · session start time</span></h2>
+<h2>4 · Site traffic benchmark <span class="sub">overall course-page page views · Apr–Jul 2026 · browse day</span></h2>
+<div id="ins-site"></div>
+<div class="grid2">
+  <div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Site PV by day of week <span style="color:var(--muted)">(number = demand index, 100 = avg)</span></div><div id="site-dow"></div></div>
+  <div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Site PV by month</div><div id="site-month"></div></div>
+</div>
+<div class="card">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Month × day-of-week heatmap <span style="color:var(--muted)">(darker = more page views)</span></div>
+  <div id="site-heat"></div>
+</div>
+
+<h2>5 · Time of day <span class="sub">IST · session start time</span></h2>
 <div id="ins-time"></div>
 <div class="grid2">
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="time-pv"></div></div>
   <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="time-rate" class="dual"></div></div>
 </div>
 
-<h2>5 · Session name <span class="sub">length & theme keywords</span></h2>
+<h2>6 · Session name <span class="sub">length & theme keywords</span></h2>
 <div id="ins-name"></div>
 <div class="card">
   <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Name length (words) vs conversion — volume-weighted</div>
@@ -146,10 +162,10 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div id="kw-tbl"></div>
 </div>
 
-<h2>6 · Session leaders <span class="sub">sort any column · search by name · min 3 sessions</span></h2>
+<h2>7 · Session leaders <span class="sub">sort any column · search by name · min 3 sessions</span></h2>
 <div class="card"><div id="leader-tbl"></div></div>
 
-<h2>7 · Demand trend over time <span class="sub">monthly, by session start month (IST)</span></h2>
+<h2>8 · Demand trend over time <span class="sub">monthly, by session start month (IST) · from Apr 2026</span></h2>
 <div class="card"><div id="month-chart"></div></div>
 
 <div class="foot">Sheet1 (funnel) + Sheet2 (course info), joined on instance id · rates are PV-weighted</div>
@@ -163,6 +179,49 @@ const pct=n=>n==null?'—':n.toFixed(2)+'%';
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 const cleanKey=k=>k.replace(/^\d+\s/,'').replace(/\(.*?\)/,'').trim()||k;
 
+// index bars centered on 100 (above avg = blue, below = orange)
+function indexBars(el,rows,valFn,labFn,fmtFn){
+ const max=Math.max(...rows.map(valFn),120);
+ el.innerHTML=rows.map(r=>{
+   const v=valFn(r); const w=max>0?Math.max(0.5,100*v/max):0;
+   const col=v>=100?'var(--s1)':'var(--s3)';
+   return `<div class="row"><div class="name" title="${labFn(r)}">${labFn(r)}</div>
+   <div class="track"><div class="bar" style="width:${w}%;background:${col}"></div>
+   <span class="val">${fmtFn(v)}</span></div></div>`;
+ }).join('');
+}
+// month x dow heatmap for site PV (S = this tab's matched baseline)
+function renderSite(V){
+ const S=V.site_pv; const scope=V.site_scope;
+ barChart(document.getElementById('site-dow'),S.by_dow,r=>r.pv,r=>r.day,css('--s1'),
+   (v)=>fmt(v));
+ // overlay index label: re-render with index shown
+ document.getElementById('site-dow').querySelectorAll('.row').forEach((row,i)=>{
+   const idx=S.by_dow[i].index; const s=row.querySelector('.val');
+   s.innerHTML=`${fmt(S.by_dow[i].pv)} <span style="color:var(--muted)">· ${idx}</span>`;
+ });
+ barChart(document.getElementById('site-month'),S.by_month,r=>r.pv,r=>r.month.replace(' 2026',''),css('--s2'),fmt);
+ // heatmap
+ const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+ const months=[...new Set(S.matrix.map(m=>m.month))];
+ const mx=Math.max(...S.matrix.map(m=>m.pv));
+ const cell=(m,d)=>{const c=S.matrix.find(x=>x.month===m&&x.day===d); return c?c.pv:0;};
+ let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:3px"><tr><th></th>'
+   +days.map(d=>`<th style="font-size:10px;color:var(--muted);font-weight:600">${d.slice(0,3)}</th>`).join('')+'</tr>';
+ months.forEach(m=>{
+   h+=`<tr><td style="font-size:11px;color:var(--text-secondary);text-align:left;white-space:nowrap">${m.replace(' 2026','')}</td>`;
+   days.forEach(d=>{const v=cell(m,d); const a=(0.12+0.88*v/mx).toFixed(2);
+     h+=`<td title="${m} ${d}: ${v.toLocaleString()} PV" style="background:color-mix(in srgb, var(--s1) ${Math.round(a*100)}%, transparent);color:var(--text-primary);font-size:11px;padding:8px 6px;border-radius:4px;text-align:center;min-width:46px;font-variant-numeric:tabular-nums">${fmt(v)}</td>`;});
+   h+='</tr>';
+ });
+ document.getElementById('site-heat').innerHTML=h+'</table></div>';
+ const bd=[...S.by_dow].sort((a,b)=>b.pv-a.pv);
+ const bm=[...S.by_month].sort((a,b)=>b.pv-a.pv);
+ const scopeTxt = scope==='no4'
+   ? 'This benchmark <b>excludes the 4 outlier leaders and offline</b>, matching this tab.'
+   : 'This is the <b>overall</b> course-page benchmark (every leader & type), matching the “All sessions” tab.';
+ ins('ins-site',`<b>The site is busiest mid-week and quietest on weekends.</b> <b>${bd[0].day}</b> pulls the most course-page traffic (index ${bd[0].index}), while <b>${bd[bd.length-1].day}</b> is lowest (${bd[bd.length-1].index}). By month, <b>${bm[0].month}</b> peaked (${fmt(bm[0].pv)} PV); ${bm[bm.length-1].month} is lowest/partial. ${scopeTxt} This is <i>browse-day</i> traffic — a scheduling & promotion benchmark, not tied to any one session.`);
+}
 function barChart(el,rows,valFn,labFn,color,fmtFn){
  const max=Math.max(...rows.map(valFn));
  el.innerHTML=rows.map(r=>{
@@ -273,8 +332,8 @@ function render(V, other){
  }
  const op = other?other.overall:null;
  document.getElementById('kpis').innerHTML=[
-  ['Tracked sessions', o.sessions.toLocaleString(), 'joined to course info', op?delta(o.sessions,op.sessions,''):''],
-  ['Total demand (PV)', fmt(o.PV_total), 'cumulative page views', ''],
+  ['Sessions (from 1 Apr)', o.sessions.toLocaleString(), o.sessions_all.toLocaleString()+' across all dates', op?delta(o.sessions,op.sessions,''):''],
+  ['Total demand (PV)', fmt(o.PV_total), 'page views, sessions from 1 Apr', ''],
   ['Add-to-cart rate', o.cart.toFixed(2)+'%', fmt(o.carts_total)+' carts (weighted)', op?delta(o.cart,op.cart,'%'):''],
   ['Conversion rate', o.sale.toFixed(2)+'%', fmt(o.sales_total)+' purchases (weighted)', op?delta(o.sale,op.sale,'%'):''],
   ['Median PV / session', Math.round(o.PV_median), 'demand is highly skewed', ''],
@@ -297,6 +356,10 @@ function render(V, other){
  dualChart(document.getElementById('price-rate'),priceRows,r=>r.key+' ₹');
  barChart(document.getElementById('dow-pv'),V.dow,r=>r.PV_total,r=>r.key,css('--s1'),fmt);
  dualChart(document.getElementById('dow-rate'),V.dow,r=>r.key.slice(0,3));
+ // normalized: session demand per unit site traffic (index, 100 = avg day)
+ indexBars(document.getElementById('dow-norm'),V.dow.filter(r=>r.demand_index!=null),
+   r=>r.demand_index,r=>r.key,v=>v.toFixed(0));
+ renderSite(V);  // site-traffic section — baseline matches this tab's cohort
  barChart(document.getElementById('time-pv'),V.time,r=>r.PV_total,r=>cleanKey(r.key),css('--s1'),fmt);
  dualChart(document.getElementById('time-rate'),V.time,r=>cleanKey(r.key));
  dualChart(document.getElementById('word-rate'),V.wordq,wordLab);
@@ -306,9 +369,10 @@ function render(V, other){
   ['Median PV',r=>Math.round(r.PV_median)],['Add-to-cart',r=>pct(r.cart)],['Conversion',r=>pct(r.sale)]]);
 
  const single=V.kw_mode==='single';
- document.getElementById('kw-note').innerHTML = single
-   ? 'Each session counted <b>once</b>, under its single <b>main theme</b> (short titles) — so numbers add up to the totals above. <b>Click a row</b> for its top 5 sessions.'
-   : 'Multi-tag: a session appears under <b>every</b> theme word in its name (so it can be counted more than once). <b>Click a row</b> for its top 5 sessions.';
+ document.getElementById('kw-note').innerHTML = (single
+   ? 'Each session counted <b>once</b>, under its single <b>main theme</b> (short titles), so themes are mutually exclusive. '
+   : 'Multi-tag: a session appears under <b>every</b> theme word in its name (so it can be counted more than once). ')
+   + '<b>Uses all available dates</b> (not just from Apr 1). <b>Click a row</b> for its top 5 sessions.';
  makeTable(document.getElementById('kw-tbl'),{
    rows:V.keywords, cols:RATE_COLS(single?'Main theme':'Keyword'), searchGet:r=>r.key,
    placeholder:single?'Search themes…':'Search keywords…', noun:single?'themes':'keywords',
@@ -327,7 +391,7 @@ function render(V, other){
      <div style="background:var(--s1);height:${ht}%;border-radius:3px 3px 0 0;min-height:1px"></div></div>`;}).join('');
  h+='</div><div style="display:flex;gap:3px;margin-top:4px">';
  h+=rows.map(r=>`<div class="axis" style="flex:1;text-align:center;font-size:9px">${r.key.slice(2)}</div>`).join('');
- h+='</div><div class="legend" style="margin-top:10px"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV) per month — step-change from 2026 (open-enrollment sessions)</span></div>';
+ h+='</div><div class="legend" style="margin-top:10px"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV) per month — sessions dated from Apr 2026 onward</span></div>';
  document.getElementById('month-chart').innerHTML=h;
 
  // ---- dynamic insights ----
@@ -346,7 +410,10 @@ function render(V, other){
  const wk=V.dow.filter(r=>['Saturday','Sunday'].includes(r.key)), wd=V.dow.filter(r=>!['Saturday','Sunday'].includes(r.key));
  const ws=wk.reduce((a,r)=>a+r.PV_total*r.sale,0)/wk.reduce((a,r)=>a+r.PV_total,0);
  const wds=wd.reduce((a,r)=>a+r.PV_total*r.sale,0)/wd.reduce((a,r)=>a+r.PV_total,0);
- ins('ins-dow',`<b>Weekdays convert better; weekends draw browsing.</b> Weekday conversion ≈ <b>${wds.toFixed(2)}%</b> vs weekend ≈ <b>${ws.toFixed(2)}%</b>. Best add-to-cart is <b>${bestDayCart.key}</b> (${pct(bestDayCart.cart)}); best conversion is <b>${bestDaySale.key}</b> (${pct(bestDaySale.sale)}).`);
+ const idxRows=V.dow.filter(r=>r.demand_index!=null);
+ const topIdx=idxRows.length?maxBy(idxRows,r=>r.demand_index):null;
+ const idxTxt=topIdx?` <b>Normalized by site traffic</b>, <b>${topIdx.key}</b>-scheduled sessions capture the most demand per unit of site traffic (index ${topIdx.demand_index.toFixed(0)}) — partly because the site is quieter that day (low denominator), so read it alongside the raw numbers.`:'';
+ ins('ins-dow',`<b>Weekdays convert better; weekends draw browsing.</b> Weekday conversion ≈ <b>${wds.toFixed(2)}%</b> vs weekend ≈ <b>${ws.toFixed(2)}%</b>. Best add-to-cart is <b>${bestDayCart.key}</b> (${pct(bestDayCart.cart)}); best conversion is <b>${bestDaySale.key}</b> (${pct(bestDaySale.sale)}).${idxTxt}`);
 
  const volTime=maxBy(V.time,r=>r.PV_total), bestTimeSale=maxBy(V.time,r=>r.sale||0);
  ins('ins-time',`<b>${cleanKey(volTime.key)} drives volume; ${cleanKey(bestTimeSale.key)} converts hardest.</b> The ${cleanKey(volTime.key)} window holds the most demand (${fmt(volTime.PV_total)} PV), while <b>${cleanKey(bestTimeSale.key)}</b> has the best conversion (${pct(bestTimeSale.sale)}) — a smaller, high-intent audience.`);

@@ -1,6 +1,57 @@
 import pandas as pd, json
 
 EXCLUDE = ['Kavyal Sedanni','Dr. Tamanna C','Dr. Rashmi N Muthalkar','Munisha Khatwani']
+CUTOFF = pd.Timestamp('2026-04-01')   # PV sections use sessions from 1 Apr 2026 onward
+DOW_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+
+# ---- Overall site page-views on course pages, by month x day-of-week (provided) ----
+# Two baselines: ALL (every leader & type) and NO4 (excl 4 leaders & excl offline).
+SITE_ALL_RAW = [
+ ('Apr 2026','Friday',29399),('Apr 2026','Monday',33949),('Apr 2026','Saturday',22281),
+ ('Apr 2026','Sunday',27720),('Apr 2026','Thursday',38756),('Apr 2026','Tuesday',29735),
+ ('Apr 2026','Wednesday',41341),
+ ('May 2026','Friday',46415),('May 2026','Monday',41131),('May 2026','Saturday',39507),
+ ('May 2026','Sunday',44214),('May 2026','Thursday',36995),('May 2026','Tuesday',41041),
+ ('May 2026','Wednesday',38970),
+ ('Jun 2026','Friday',51387),('Jun 2026','Monday',59308),('Jun 2026','Saturday',37950),
+ ('Jun 2026','Sunday',44420),('Jun 2026','Thursday',48538),('Jun 2026','Tuesday',60639),
+ ('Jun 2026','Wednesday',51583),
+ ('Jul 2026','Friday',13713),('Jul 2026','Monday',17423),('Jul 2026','Saturday',13055),
+ ('Jul 2026','Sunday',16138),('Jul 2026','Thursday',17801),('Jul 2026','Tuesday',18431),
+ ('Jul 2026','Wednesday',30024),
+]
+SITE_NO4_RAW = [
+ ('Apr 2026','Friday',20768),('Apr 2026','Monday',23275),('Apr 2026','Saturday',14836),
+ ('Apr 2026','Sunday',19733),('Apr 2026','Thursday',27197),('Apr 2026','Tuesday',21848),
+ ('Apr 2026','Wednesday',28585),
+ ('May 2026','Friday',29301),('May 2026','Monday',25199),('May 2026','Saturday',25008),
+ ('May 2026','Sunday',28859),('May 2026','Thursday',25307),('May 2026','Tuesday',27662),
+ ('May 2026','Wednesday',28297),
+ ('Jun 2026','Friday',28705),('Jun 2026','Monday',38189),('Jun 2026','Saturday',23995),
+ ('Jun 2026','Sunday',29525),('Jun 2026','Thursday',30162),('Jun 2026','Tuesday',38166),
+ ('Jun 2026','Wednesday',33046),
+ ('Jul 2026','Friday',8360),('Jul 2026','Monday',10442),('Jul 2026','Saturday',7191),
+ ('Jul 2026','Sunday',9830),('Jul 2026','Thursday',11386),('Jul 2026','Tuesday',9392),
+ ('Jul 2026','Wednesday',15805),
+]
+MONTH_ORDER = ['Apr 2026','May 2026','Jun 2026','Jul 2026']
+
+def agg_site(raw):
+    dow, month = {}, {}
+    for m,day,v in raw:
+        dow[day]=dow.get(day,0)+v
+        month[m]=month.get(m,0)+v
+    avg=sum(dow.values())/len(dow)
+    block={
+        'by_dow':   [{'day':d,'pv':dow[d],'index':round(100*dow[d]/avg,1)} for d in DOW_ORDER],
+        'by_month': [{'month':m,'pv':month[m]} for m in MONTH_ORDER],
+        'matrix':   [{'month':m,'day':day,'pv':v} for (m,day,v) in raw],
+        'total':    sum(dow.values()),
+    }
+    return dow, block
+
+SITE_ALL_DOW, SITE_ALL_BLOCK = agg_site(SITE_ALL_RAW)
+SITE_NO4_DOW, SITE_NO4_BLOCK = agg_site(SITE_NO4_RAW)
 
 def session_list(sub):
     top = sub.sort_values('PV', ascending=False).head(5)
@@ -11,101 +62,121 @@ def session_list(sub):
         'date':str(r['startIST'])[:16] if pd.notna(r.get('startIST')) else ''
     } for _,r in top.iterrows()]
 
-def build(df, single_kw=False):
-    def pooled_rows(col, order=None):
+def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all'):
+    # PV universe = sessions from 1 Apr onward; keyword universe = ALL dates
+    pv = df[df['startIST'] >= CUTOFF].copy()
+
+    def pooled_rows(frame, col, order=None):
         out=[]
-        for k, sub in df.groupby(col):
-            pv=sub['PV'].sum()
-            out.append({'key':str(k),'n':int(len(sub)),'PV_total':int(pv),
+        for k, sub in frame.groupby(col):
+            s=sub['PV'].sum()
+            out.append({'key':str(k),'n':int(len(sub)),'PV_total':int(s),
                         'PV_median':float(sub['PV'].median()),
-                        'cart':float(100*sub['carts'].sum()/pv) if pv else None,
-                        'sale':float(100*sub['sales'].sum()/pv) if pv else None})
+                        'cart':float(100*sub['carts'].sum()/s) if s else None,
+                        'sale':float(100*sub['sales'].sum()/s) if s else None})
         if order:
             out = sorted(out, key=lambda r: order.index(r['key']) if r['key'] in order else 999)
         return out
 
     d = {}
     d['overall'] = {
-        'sessions': int(len(df)), 'PV_total': int(df['PV'].sum()),
-        'cart': float(100*df['carts'].sum()/df['PV'].sum()),
-        'sale': float(100*df['sales'].sum()/df['PV'].sum()),
-        'PV_median': float(df['PV'].median()),
-        'carts_total': int(df['carts'].sum()), 'sales_total': int(df['sales'].sum()),
+        'sessions': int(len(pv)), 'sessions_all': int(len(df)),
+        'PV_total': int(pv['PV'].sum()),
+        'cart': float(100*pv['carts'].sum()/pv['PV'].sum()) if pv['PV'].sum() else 0,
+        'sale': float(100*pv['sales'].sum()/pv['PV'].sum()) if pv['PV'].sum() else 0,
+        'PV_median': float(pv['PV'].median()),
+        'carts_total': int(pv['carts'].sum()), 'sales_total': int(pv['sales'].sum()),
     }
-    d['type'] = pooled_rows('type')
-    d['price_tier'] = pooled_rows('price_tier', ['0 Free','1-300','301-600','601-1000','1001-1500','1500+'])
-    d['dow'] = pooled_rows('dow_name', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
-    d['time'] = pooled_rows('time_bucket', ['1 Early AM (<9)','2 Late Morning (9-12)','3 Afternoon (12-15)','4 Late Afternoon (15-18)','5 Evening (18-21)','6 Night (21+)'])
+    d['type'] = pooled_rows(pv, 'type')
+    d['price_tier'] = pooled_rows(pv, 'price_tier', ['0 Free','1-300','301-600','601-1000','1001-1500','1500+'])
+    d['dow'] = pooled_rows(pv, 'dow_name', DOW_ORDER)
+    d['time'] = pooled_rows(pv, 'time_bucket', ['1 Early AM (<9)','2 Late Morning (9-12)','3 Afternoon (12-15)','4 Late Afternoon (15-18)','5 Evening (18-21)','6 Night (21+)'])
 
-    dd = df.copy()
+    # Normalize session demand by site traffic on each day-of-week (both Apr+ windows)
+    norms=[]
+    for r in d['dow']:
+        sp = (site_dow or {}).get(r['key'])
+        r['site_pv'] = sp
+        r['pv_per_1k_site'] = round(1000.0*r['PV_total']/sp, 2) if sp else None
+        if r['pv_per_1k_site'] is not None: norms.append(r['pv_per_1k_site'])
+    navg = sum(norms)/len(norms) if norms else None
+    for r in d['dow']:
+        r['demand_index'] = round(100*r['pv_per_1k_site']/navg,1) if (navg and r['pv_per_1k_site'] is not None) else None
+    d['site_pv'] = site_block
+    d['site_scope'] = site_scope
+
+    dd = pv.copy()
     dd['wordq'] = pd.qcut(dd['name_len_words'], 4, duplicates='drop')
     wq=[]
     for k,sub in dd.groupby('wordq', observed=True):
-        pv=sub['PV'].sum()
-        wq.append({'key':str(k),'n':int(len(sub)),'PV_total':int(pv),'PV_median':float(sub['PV'].median()),
-                   'cart':float(100*sub['carts'].sum()/pv),'sale':float(100*sub['sales'].sum()/pv)})
+        s=sub['PV'].sum()
+        wq.append({'key':str(k),'n':int(len(sub)),'PV_total':int(s),'PV_median':float(sub['PV'].median()),
+                   'cart':float(100*sub['carts'].sum()/s) if s else 0,'sale':float(100*sub['sales'].sum()/s) if s else 0})
     d['wordq']=wq
 
-    kws=[]
-    kw_sessions={}
+    # ---- Keywords: ALL dates (full df), per user instruction ----
+    kws=[]; kw_sessions={}
     if single_kw:
-        # Each session under exactly ONE main keyword (short titles)
         for key, sub in df.groupby('main_keyword'):
             if len(sub) < 3: continue
-            pv=sub['PV'].sum()
-            kws.append({'key':str(key),'n':int(len(sub)),'PV_total':int(pv),
+            s=sub['PV'].sum()
+            kws.append({'key':str(key),'n':int(len(sub)),'PV_total':int(s),
                         'PV_median':float(sub['PV'].median()),
-                        'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
-                        'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+                        'cart':float(100*sub['carts'].sum()/s) if s else 0,
+                        'sale':float(100*sub['sales'].sum()/s) if s else 0})
             kw_sessions[str(key)]=session_list(sub)
     else:
-        # Multi-tag: a session appears under every theme word it contains
         for c in [c for c in df.columns if c.startswith('kw_')]:
             sub=df[df[c]==1]
             if len(sub)<15: continue
             key=c[3:].replace('_',' ')
-            pv=sub['PV'].sum()
-            kws.append({'key':key,'n':int(len(sub)),'PV_total':int(pv),
+            s=sub['PV'].sum()
+            kws.append({'key':key,'n':int(len(sub)),'PV_total':int(s),
                         'PV_median':float(sub['PV'].median()),
-                        'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
-                        'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+                        'cart':float(100*sub['carts'].sum()/s) if s else 0,
+                        'sale':float(100*sub['sales'].sum()/s) if s else 0})
             kw_sessions[key]=session_list(sub)
     d['keywords']=sorted(kws,key=lambda r:-r['PV_total'])
     d['keyword_sessions']=kw_sessions
     d['kw_mode']='single' if single_kw else 'multi'
 
     lt=[]
-    for k,sub in df.groupby('leader_name'):
+    for k,sub in pv.groupby('leader_name'):
         if len(sub)<3: continue
-        pv=sub['PV'].sum()
-        lt.append({'key':str(k),'n':int(len(sub)),'PV_total':int(pv),'PV_median':float(sub['PV'].median()),
-                   'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
-                   'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+        s=sub['PV'].sum()
+        lt.append({'key':str(k),'n':int(len(sub)),'PV_total':int(s),'PV_median':float(sub['PV'].median()),
+                   'cart':float(100*sub['carts'].sum()/s) if s else 0,
+                   'sale':float(100*sub['sales'].sum()/s) if s else 0})
     d['leaders']=sorted(lt,key=lambda r:-r['PV_total'])
 
     mt=[]
-    for k,sub in df.groupby('month'):
-        if len(sub)<5: continue
-        pv=sub['PV'].sum()
-        mt.append({'key':str(k),'n':int(len(sub)),'PV_total':int(pv),'PV_median':float(sub['PV'].median()),
-                   'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
-                   'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+    for k,sub in pv.groupby('month'):
+        if len(sub)<3: continue
+        s=sub['PV'].sum()
+        mt.append({'key':str(k),'n':int(len(sub)),'PV_total':int(s),'PV_median':float(sub['PV'].median()),
+                   'cart':float(100*sub['carts'].sum()/s) if s else 0,
+                   'sale':float(100*sub['sales'].sum()/s) if s else 0})
     d['monthly']=sorted(mt,key=lambda r:r['key'])
     return d
 
 df = pd.read_csv('merged_analysis.csv')
+df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
 online_no4 = no4[no4['type'] != 'OFFLINE'].copy()
 out = {
-    'all': build(df),
-    'filtered': build(no4),
-    'online_clean': build(online_no4),
-    'online_single': build(online_no4, single_kw=True),
+    'all': build(df, site_dow=SITE_ALL_DOW, site_block=SITE_ALL_BLOCK, site_scope='all'),
+    'filtered': build(no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
+    'online_clean': build(online_no4, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
+    'online_single': build(online_no4, single_kw=True, site_dow=SITE_NO4_DOW, site_block=SITE_NO4_BLOCK, site_scope='no4'),
     'excluded_leaders': EXCLUDE,
+    'cutoff': '2026-04-01',
 }
 with open('dashboard_data.json','w') as f:
     json.dump(out,f,indent=1)
-print('wrote dashboard_data.json (all + filtered + online_clean + online_single)')
+print('wrote dashboard_data.json (PV sections from 1 Apr; keywords all-dates)')
 for k in ['all','filtered','online_clean','online_single']:
-    print(f'{k:14s}:', out[k]['overall'])
-print('single-kw categories:', len(out['online_single']['keywords']))
+    o=out[k]['overall']
+    print(f"{k:14s}: PV-sessions={o['sessions']:4d} (all={o['sessions_all']:4d})  PV={o['PV_total']:>7d}  cart={o['cart']:.2f}%  sale={o['sale']:.2f}%  site={out[k]['site_scope']}")
+print('SITE_ALL DOW index:', {r['day'][:3]:r['index'] for r in SITE_ALL_BLOCK['by_dow']})
+print('SITE_NO4 DOW index:', {r['day'][:3]:r['index'] for r in SITE_NO4_BLOCK['by_dow']})
+print('online_single demand_index by DOW:', {r['key'][:3]:r['demand_index'] for r in out['online_single']['dow']})
