@@ -127,7 +127,7 @@ SITE_ALL_TBUCKET, SITE_ALL_TIME_BLOCK = agg_site_hour(SITE_HOUR_ALL_RAW)
 def session_list(sub):
     top = sub.sort_values('PV', ascending=False).head(5)
     return [{
-        'name':str(r['name_clean']),'leader':str(r['leader_name']),
+        'name':str(r['disp_name']),'leader':str(r['leader_name']),
         'PV':int(r['PV']),'cart':float(r['RC_rate']),'sale':float(r['RS_rate']),
         'price':int(r['price']),'type':str(r['type']),
         'date':str(r['startIST'])[:16] if pd.notna(r.get('startIST')) else ''

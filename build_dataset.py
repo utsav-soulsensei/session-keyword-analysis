@@ -89,6 +89,12 @@ for kw in KEYWORDS:
 
 df['leader_name'] = df['leader_name'].fillna('Unknown').str.strip()
 
+# Display name = shortName (marketing title), falling back to the full course
+# name only when shortName is missing/"[NULL]".
+_sn = df['shortName'].astype(str).str.replace('\n', ' ', regex=False).str.strip()
+_bad = _sn.str.upper().isin(['[NULL]', 'NAN', ''])
+df['disp_name'] = _sn.where(~_bad, df['name_clean'])
+
 # ---------- Single "main keyword" per session (mutually exclusive, short titles) ----------
 # Priority-ordered: the FIRST theme whose pattern matches the name wins, so each
 # session is counted under exactly one theme. Distinctive modalities rank above
