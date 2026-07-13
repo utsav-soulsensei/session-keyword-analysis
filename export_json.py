@@ -334,6 +334,9 @@ def leader_detail(sub):
                     'time':str(r['time_bucket']),'price':int(r['price']),'PV':int(r['PV']),
                     'cart':float(r['RC_rate']),'sale':float(r['RS_rate']),'date':str(r['startIST'])[:16]}
                    for _,r in sub.sort_values('PV',ascending=False).iterrows()]
+    kt, ks = kw2_block(sub, session_list)
+    d['kwtable']=kt
+    d['kwtable_sessions']=ks
     return d
 
 df = pd.read_csv('merged_analysis.csv')

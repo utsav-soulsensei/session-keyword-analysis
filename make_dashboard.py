@@ -231,6 +231,11 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
     <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="ld-price-pv"></div></div>
     <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="ld-price-rate" class="dual"></div></div>
   </div>
+  <h2>Keyword occurrence <span class="sub">multi-tag — a session can match several</span></h2>
+  <div class="card">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Matched on short name across this leader's window. Small samples — indicative. <b>Click a row</b> for its sessions.</div>
+    <div id="ld-kw2"></div>
+  </div>
   <h2>All sessions <span class="sub">every session in the window — sortable & searchable</span></h2>
   <div class="card"><div id="ld-sessions"></div></div>
 </div><!-- /leaders-view -->
@@ -371,7 +376,7 @@ function makeTable(el,cfg){
    host.querySelectorAll('th.sortable').forEach(th=>th.addEventListener('click',()=>{
      const i=+th.dataset.c;
      if(sortCol===i)sortDir=-sortDir;
-     else{sortCol=i;sortDir=typeof cfg.cols[i].val(cfg.rows[0])==='string'?1:-1;}
+     else{sortCol=i;const s0=cfg.rows[0];sortDir=(s0&&typeof cfg.cols[i].val(s0)==='string')?1:-1;}
      draw();
    }));
    if(cfg.expandGet) host.querySelectorAll('tr.kwrow').forEach(row=>row.addEventListener('click',()=>{
@@ -632,6 +637,11 @@ function renderLeaders(){
  const bt=best(D.theme),bd=best(D.dow),btm=best(D.time);
  ins('ld-ins',`<b>What's working for ${esc(curLeader)}:</b> best-converting topic is <b>${bt?esc(bt.key):'—'}</b>${bt?` (${bt.sale.toFixed(2)}%, n=${bt.n})`:''}, `
    +`best day <b>${bd?bd.key:'—'}</b>${bd?` (${bd.sale.toFixed(2)}%, n=${bd.n})`:''}, best slot <b>${btm?cleanKey(btm.key):'—'}</b>${btm?` (${btm.sale.toFixed(2)}%, n=${btm.n})`:''}. With so few sessions these are indicative — the session list shows the raw detail.`);
+ // multi-tag keyword table for this leader
+ makeTable(document.getElementById('ld-kw2'),{
+   rows:D.kwtable||[], cols:RATE_COLS('Keyword'), searchGet:r=>r.key,
+   placeholder:'Search keywords…', noun:'keywords', sortCol:2, sortDir:-1,
+   expandGet:r=>drillHtml((D.kwtable_sessions||{})[r.key]) });
  // session table
  const price=r=>'₹'+r.price.toLocaleString();
  makeTable(document.getElementById('ld-sessions'),{
