@@ -1,4 +1,32 @@
-import pandas as pd, json
+import pandas as pd, json, re
+
+# User's multi-tag keyword list (a session can match several). Matched on short name.
+KW2 = [
+ ('Grief',['grief','bereav','mourning','widow']),('Healing',['heal']),('Yourself',['yourself']),
+ ('Karma',['karma']),('Karmic',['karmic']),('Gut',['gut']),('Death',['death']),
+ ('Wealth',['wealth']),('Money',['money']),("Ho'oponopono",["ho'oponopono","hooponopono"]),
+ ('Cord Cutting',['cord cut','cord cutting']),('Inherited',['inherit']),('Parent',['parent']),
+ ('Inner',['inner']),('Chakra',['chakra']),('Manifest',['manifest']),('Block',['block']),
+ ('Attract',['attract']),('Break',['break']),('Moon',['moon']),('Marriage',['marriage']),
+ ('Divorce',['divorce']),('Love',['love']),
+]
+def kw2_block(dfc, session_list):
+    name = dfc['disp_name'].astype(str).str.lower().str.replace('’', "'", regex=False)
+    rows=[]; sess={}
+    for label,pats in KW2:
+        mask=None
+        for p in pats:
+            m=name.str.contains(re.escape(p), regex=True)
+            mask = m if mask is None else (mask | m)
+        sub=dfc[mask.values]
+        if len(sub)==0: continue
+        pv=sub['PV'].sum()
+        rows.append({'key':label,'n':int(len(sub)),'PV_total':int(pv),
+                     'PV_median':float(sub['PV'].median()),
+                     'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
+                     'sale':float(100*sub['sales'].sum()/pv) if pv else 0})
+        sess[label]=session_list(sub)
+    return sorted(rows,key=lambda r:-r['PV_total']), sess
 
 EXCLUDE = ['Kavyal Sedanni','Dr. Tamanna C','Dr. Rashmi N Muthalkar','Munisha Khatwani']
 CUTOFF = pd.Timestamp('2026-04-01')   # PV sections use sessions from 1 Apr 2026 onward
@@ -224,6 +252,11 @@ def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all',
     d['keywords']=sorted(kws,key=lambda r:-r['PV_total'])
     d['keyword_sessions']=kw_sessions
     d['kw_mode']='single' if single_kw else 'multi'
+
+    # Second table: user's multi-tag keyword list (all dates, this cohort)
+    kt, ks = kw2_block(df, session_list)
+    d['kwtable']=kt
+    d['kwtable_sessions']=ks
 
     lt=[]
     for k,sub in pv.groupby('leader_name'):

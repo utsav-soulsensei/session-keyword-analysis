@@ -182,6 +182,10 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div id="kw-note" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
   <div id="kw-tbl"></div>
 </div>
+<div class="card">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Keyword occurrence — <b>multi-tag</b> (a session can match several of these keywords). All dates · matched on short name. <b>Click a row</b> for its top 5 sessions.</div>
+  <div id="kw2-tbl"></div>
+</div>
 
 <h2>7 · Session leaders <span class="sub">sort any column · search by name · min 3 sessions</span></h2>
 <div class="card"><div id="leader-tbl"></div></div>
@@ -467,6 +471,11 @@ function render(V, other){
    placeholder:single?'Search themes…':'Search keywords…', noun:single?'themes':'keywords',
    sortCol:2, sortDir:-1,
    expandGet:r=>drillHtml((V.keyword_sessions||{})[r.key]) });
+
+ makeTable(document.getElementById('kw2-tbl'),{
+   rows:V.kwtable||[], cols:RATE_COLS('Keyword'), searchGet:r=>r.key,
+   placeholder:'Search keywords…', noun:'keywords', sortCol:2, sortDir:-1,
+   expandGet:r=>drillHtml((V.kwtable_sessions||{})[r.key]) });
 
  makeTable(document.getElementById('leader-tbl'),{
    rows:V.leaders, cols:RATE_COLS('Leader'), searchGet:r=>r.key,
