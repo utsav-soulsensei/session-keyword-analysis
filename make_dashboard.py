@@ -116,7 +116,7 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
 
 <div class="tabs" id="tabs"></div>
 <div class="banner" id="banner"></div>
-<div class="momctrl" style="margin:10px 0 0"><div class="grp"><span class="lbl">Months</span><div class="pillrow" id="monthsel"></div><span class="lbl" style="text-transform:none">affects month-by-month charts</span></div></div>
+<div class="momctrl" id="monthbar" style="margin:10px 0 0"><div class="grp"><span class="lbl">Months</span><div class="pillrow" id="monthsel"></div><span class="lbl" style="text-transform:none">affects month-by-month charts</span></div></div>
 
 <div id="std-view">
 <div class="kpis" id="kpis"></div>
@@ -201,6 +201,35 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <h2>Hour of day — month on month <span class="sub">one line per month · x = hour (IST)</span></h2>
   <div class="card"><div id="mom-hour"></div></div>
 </div><!-- /mom-view -->
+
+<div id="leaders-view" style="display:none">
+  <div class="momctrl"><div class="grp"><span class="lbl">Leader</span><div class="pillrow" id="leadersel"></div></div></div>
+  <div id="ld-note" style="font-size:12px;color:var(--muted);margin:6px 0 4px"></div>
+  <div class="kpis" id="ld-kpis"></div>
+  <div id="ld-ins"></div>
+  <h2>By topic <span class="sub">main theme · does subject matter drive demand/conversion?</span></h2>
+  <div class="grid2">
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="ld-theme-pv"></div></div>
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="ld-theme-rate" class="dual"></div></div>
+  </div>
+  <h2>By day of week</h2>
+  <div class="grid2">
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="ld-dow-pv"></div></div>
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="ld-dow-rate" class="dual"></div></div>
+  </div>
+  <h2>By time of day <span class="sub">IST</span></h2>
+  <div class="grid2">
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="ld-time-pv"></div></div>
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="ld-time-rate" class="dual"></div></div>
+  </div>
+  <h2>By price</h2>
+  <div class="grid2">
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="ld-price-pv"></div></div>
+    <div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="ld-price-rate" class="dual"></div></div>
+  </div>
+  <h2>All sessions <span class="sub">every session in the window — sortable & searchable</span></h2>
+  <div class="card"><div id="ld-sessions"></div></div>
+</div><!-- /leaders-view -->
 
 <div class="foot">Sheet1 (funnel) + Sheet2 (course info), joined on instance id · rates are PV-weighted</div>
 </div>
@@ -567,19 +596,68 @@ function renderMonthSel(){
 }
 function refresh(){ if(cur==='mom') renderMoM(); else render(DATA[cur], cur==='all'?null:DATA.all); }
 
+// ---- Top-4-leaders deep-dive tab ----
+let curLeader=null;
+function renderLeaders(){
+ const names=Object.keys(DATA.leaders_detail);
+ if(!curLeader) curLeader=names[0];
+ document.getElementById('leadersel').innerHTML=names
+   .map(nm=>`<button class="pill ${curLeader===nm?'on':''}" data-l="${esc(nm)}">${esc(nm)}</button>`).join('');
+ document.querySelectorAll('#leadersel .pill').forEach(b=>b.onclick=()=>{curLeader=b.dataset.l;renderLeaders();});
+ const D=DATA.leaders_detail[curLeader], o=D.overall;
+ document.getElementById('ld-note').innerHTML=`<b>${esc(curLeader)}</b> — online sessions since Jan 2026 (~6 months). <b>${o.n} sessions</b>. Small sample: read as directional, and see the full session list below.`;
+ document.getElementById('ld-kpis').innerHTML=[
+   ['Sessions',o.n,'online, ~6 mo'],['Total demand (PV)',fmt(o.PV_total),'page views'],
+   ['Add-to-cart',o.cart.toFixed(2)+'%','weighted'],['Conversion',o.sale.toFixed(2)+'%','weighted'],
+   ['Median PV',Math.round(o.PV_median),'per session'],
+ ].map(k=>`<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div><div class="d">${k[2]}</div></div>`).join('');
+ const nSuf=r=>'('+r.n+')';
+ const pvL=(el,rows,lab)=>barChart(document.getElementById(el),rows,r=>r.PV_total,lab,css('--s1'),fmt,nSuf);
+ const rtL=(el,rows,lab)=>dualChart(document.getElementById(el),rows,lab);
+ pvL('ld-theme-pv',D.theme,r=>r.key); rtL('ld-theme-rate',D.theme,r=>r.key);
+ pvL('ld-dow-pv',D.dow,r=>r.key);     rtL('ld-dow-rate',D.dow,r=>r.key.slice(0,3));
+ pvL('ld-time-pv',D.time,r=>timeLab(r.key)); rtL('ld-time-rate',D.time,r=>timeLab(r.key));
+ pvL('ld-price-pv',D.price,r=>r.key+' ₹'); rtL('ld-price-rate',D.price,r=>r.key+' ₹');
+ // insight: best-converting topic / day / time (min 1 session, by sale then PV)
+ const best=(arr)=>arr.length?[...arr].sort((a,b)=>b.sale-a.sale||b.PV_total-a.PV_total)[0]:null;
+ const bt=best(D.theme),bd=best(D.dow),btm=best(D.time);
+ ins('ld-ins',`<b>What's working for ${esc(curLeader)}:</b> best-converting topic is <b>${bt?esc(bt.key):'—'}</b>${bt?` (${bt.sale.toFixed(2)}%, n=${bt.n})`:''}, `
+   +`best day <b>${bd?bd.key:'—'}</b>${bd?` (${bd.sale.toFixed(2)}%, n=${bd.n})`:''}, best slot <b>${btm?cleanKey(btm.key):'—'}</b>${btm?` (${btm.sale.toFixed(2)}%, n=${btm.n})`:''}. With so few sessions these are indicative — the session list shows the raw detail.`);
+ // session table
+ const price=r=>'₹'+r.price.toLocaleString();
+ makeTable(document.getElementById('ld-sessions'),{
+   rows:D.sessions, searchGet:r=>r.name+' '+r.theme,
+   placeholder:'Search sessions…', noun:'sessions', sortCol:5, sortDir:-1,
+   cols:[
+     {label:'Session',get:r=>esc(r.name),val:r=>r.name,align:'left'},
+     {label:'Topic',get:r=>esc(r.theme),val:r=>r.theme,align:'left'},
+     {label:'Day',get:r=>r.dow.slice(0,3),val:r=>r.dow,align:'left'},
+     {label:'Time',get:r=>timeLab(r.time).replace(/ \(.*\)/,''),val:r=>r.time,align:'left'},
+     {label:'Price',get:price,val:r=>r.price},
+     {label:'PV',get:r=>fmt(r.PV),val:r=>r.PV},
+     {label:'Cart',get:r=>r.cart.toFixed(2)+'%',val:r=>r.cart},
+     {label:'Conv.',get:r=>r.sale.toFixed(2)+'%',val:r=>r.sale},
+   ]});
+}
+
 // tabs
 let cur='all';
 function setTab(k){
  cur=k;
  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.k===k));
- const sv=document.getElementById('std-view'), mv=document.getElementById('mom-view');
+ const sv=document.getElementById('std-view'), mv=document.getElementById('mom-view'), lv=document.getElementById('leaders-view');
  const b=document.getElementById('banner');
  const n=x=>DATA[x].overall.sessions.toLocaleString();
+ sv.style.display='none'; mv.style.display='none'; lv.style.display='none';
+ document.getElementById('monthbar').style.display = (k==='leaders')?'none':'';
  if(k==='mom'){
-   sv.style.display='none'; mv.style.display=''; renderMoM();
+   mv.style.display=''; renderMoM();
    b.innerHTML=`<b>Month-on-month funnel</b> by weekday and hour, Apr–Jul 2026. Toggle cohort and metric below. Platform PVs are browse-time; session metrics are by scheduled start.`;
+ }else if(k==='leaders'){
+   lv.style.display=''; renderLeaders();
+   b.innerHTML=`<b>Top-4-leaders deep-dive</b> — each leader's <b>online</b> sessions over the last ~6 months. Pick a leader below to see how topic, day, time and price relate to their demand & conversion. Samples are small — directional.`;
  }else{
-   sv.style.display=''; mv.style.display='none';
+   sv.style.display='';
    render(DATA[k], k==='all'?null:DATA.all);   // deltas baselined to All sessions
    const BAN={
     all:`Showing <b>all ${n('all')}</b> sessions (page-view sections from 1 Apr) — <b>every leader and type</b> included. Each session is filed under its <b>single main theme</b>.`,
@@ -593,6 +671,7 @@ document.getElementById('tabs').innerHTML=[
  ['all','All sessions',DATA.all.overall.sessions+' sessions'],
  ['online_single','Without 4 leaders + offline',DATA.online_single.overall.sessions+' sessions'],
  ['mom','Month-on-month','weekday & hour funnel'],
+ ['leaders','Top 4 leaders','per-leader deep-dive'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
 renderMonthSel();

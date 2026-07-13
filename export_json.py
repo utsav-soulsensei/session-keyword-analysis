@@ -269,6 +269,40 @@ def mom_block(dfc, site_dow_raw, site_hour_raw):
                               'session_pv':int(s[0]),'carts':int(round(s[1])),'sales':int(round(s[2]))})
     return {'dow':dow_rows,'hour':hour_rows}
 
+# ---- Per-leader deep-dive (top 4 leaders, online only, last ~6 months) ----
+LEAD_ORDER = ['Kavyal Sedanni','Dr. Tamanna C','Dr. Rashmi N Muthalkar','Munisha Khatwani']
+LEAD_CUTOFF = pd.Timestamp('2026-01-01')  # ~6 months of active/upcoming sessions
+TIME_ORDER = ['1 Early AM (<9)','2 Late Morning (9-12)','3 Afternoon (12-15)',
+              '4 Late Afternoon (15-18)','5 Evening (18-21)','6 Night (21+)']
+PRICE_ORDER = ['0 Free','1-300','301-600','601-1000','1001-1500','1500+']
+
+def _brk(sub, col, order=None):
+    out=[]
+    for k,g in sub.groupby(col):
+        pv=g['PV'].sum()
+        out.append({'key':str(k),'n':int(len(g)),'PV_total':int(pv),
+                    'cart':float(100*g['carts'].sum()/pv) if pv else 0,
+                    'sale':float(100*g['sales'].sum()/pv) if pv else 0})
+    if order: out=sorted(out,key=lambda r: order.index(r['key']) if r['key'] in order else 999)
+    else: out=sorted(out,key=lambda r:-r['PV_total'])
+    return out
+
+def leader_detail(sub):
+    pv=sub['PV'].sum()
+    d={'overall':{'n':int(len(sub)),'PV_total':int(pv),
+        'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
+        'sale':float(100*sub['sales'].sum()/pv) if pv else 0,
+        'PV_median':float(sub['PV'].median()) if len(sub) else 0}}
+    d['theme']=_brk(sub,'main_keyword')
+    d['dow']=_brk(sub,'dow_name',DOW_ORDER)
+    d['time']=_brk(sub,'time_bucket',TIME_ORDER)
+    d['price']=_brk(sub,'price_tier',PRICE_ORDER)
+    d['sessions']=[{'name':str(r['disp_name']),'theme':str(r['main_keyword']),'dow':str(r['dow_name']),
+                    'time':str(r['time_bucket']),'price':int(r['price']),'PV':int(r['PV']),
+                    'cart':float(r['RC_rate']),'sale':float(r['RS_rate']),'date':str(r['startIST'])[:16]}
+                   for _,r in sub.sort_values('PV',ascending=False).iterrows()]
+    return d
+
 df = pd.read_csv('merged_analysis.csv')
 df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
@@ -284,6 +318,10 @@ out = {
     'mom': {
         'all': mom_block(df, SITE_ALL_RAW, SITE_HOUR_ALL_RAW),
         'no4': mom_block(online_no4, SITE_NO4_RAW, SITE_HOUR_NO4_RAW),
+    },
+    'leaders_detail': {
+        L: leader_detail(df[(df['leader_name']==L) & (df['type']!='OFFLINE') & (df['startIST']>=LEAD_CUTOFF)].copy())
+        for L in LEAD_ORDER
     },
 }
 with open('dashboard_data.json','w') as f:
