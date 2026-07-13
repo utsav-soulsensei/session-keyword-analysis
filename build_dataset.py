@@ -100,37 +100,40 @@ df['disp_name'] = _sn.where(~_bad, df['name_clean'])
 # session is counted under exactly one theme. Distinctive modalities rank above
 # broad life-goals, which rank above generic words like "heal"/"energy".
 KW_PRIORITY = [
-    ('Tarot',               ['tarot']),
-    ('Angel',               ['angel']),
-    ('Reiki',               ['reiki']),
-    ('Chakra',              ['chakra']),
-    ('Numerology',          ['numerolog']),
-    ('Astrology',           ['astro', 'zodiac', 'horoscope', 'nakshatra']),
-    ('Moon',                ['moon']),
-    ('Protection & Evil Eye',['nazar', 'evil eye', 'cord cut', 'cord-cut', 'cutting cord', 'protection', 'psychic attack', 'shield', 'black magic']),
-    ('Psychic & Activation',['psychic', 'intuition', 'third eye', 'clairvoy', 'sixth sense', 'activation', 'activate', 'awaken', 'abilities', 'telepath']),
-    ('Devotional & Deity',  ['sadhana', 'naamjap', 'namjap', 'hanuman', 'gita', 'ganesh', 'durga', 'lakshmi', 'shiv', 'krishna', 'kali', 'sai', 'buddha', 'puja', 'pooja', 'vidhi', 'bhajan', 'kirtan', 'chant', 'mantra', 'prayer', 'navratri', 'shani']),
-    ('Ancestral',           ['ancestral', 'lineage']),
-    ('Inner Child',         ['inner child', 'inner-child']),
-    ('Karma & Past Life',   ['karma', 'past life', 'past-life']),
-    ('Dreams',              ['dream']),
-    ('Wealth & Money',      ['wealth', 'money', 'abundance', 'prosper', 'financ', 'rich']),
-    ('Love & Relationships',['love', 'relationship', 'partner', 'marriage', 'soulmate', 'breakup', 'divorce', 'romance']),
-    ('Manifestation',       ['manifest']),
-    ('Yoga',                ['yoga']),
-    ('Meditation',          ['meditat', 'mindful']),
-    ('Breathwork',          ['breath', 'pranayam']),
-    ('Sleep',               ['sleep', 'insomnia']),
-    ('Stress & Anxiety',    ['stress', 'anxiet', 'overthink', 'worry', 'calm', 'peace', 'emotional', 'emotion']),
-    ('Confidence & Self-Worth', ['confidence', 'self-worth', 'self worth', 'self-love', 'self esteem', 'self-esteem', 'self worth']),
-    ('Fear',                ['fear', 'phobia']),
-    ('Body & Health',       ['gut', 'weight', 'posture', 'pain', 'hormone', 'fitness', 'detox', 'skin', 'hair', 'body', 'lymph', 'thyroid', 'pcos', 'pcod', 'face']),
-    ('Clarity & Mind',      ['clarity', 'focus', 'mental', 'conscious', 'awareness', 'voice', 'decision', 'mind']),
-    ('Energy & Aura',       ['energy', 'aura', 'vibration', 'frequency']),
-    ('Release & Blocks',    ['release', 'block', 'let go', 'letting go', 'clear', 'break free', 'pattern']),
-    ('Healing',             ['heal']),
-    ('Soul & Spirit',       ['soul', 'spirit', 'divine', 'god', 'dharma', 'purpose', 'awaken', 'transform', 'journey']),
-    ('Vision & Goals',      ['vision', 'goal', 'success', 'power']),
+    # ---- user's requested themes (specific first) ----
+    ('Womb Healing',          ['womb']),
+    ('Chronic Healing',       ['chronic']),
+    ('Ancestral Healing',     ['ancestral', 'lineage', 'ancestor']),
+    ('Inner Child',           ['inner child', 'inner-child']),
+    ('Cord Cutting',          ['cord cut', 'cord-cut', 'cutting cord', 'cut cord', 'cut the cord', 'cord cutting']),
+    ('Grief',                 ['grief', 'bereav', 'mourning', 'widow', 'loss of', 'losing a', 'lost a loved']),
+    ('Karma',                 ['karma', 'karmic', 'past life', 'past-life']),
+    ('Reiki',                 ['reiki']),
+    ('Abundance',             ['abundance', 'prosper', 'wealth', 'money', 'rich', 'financ']),
+    ('Manifestation',         ['manifest', 'law of attraction']),
+    ('Improve Relationships', ['relationship', 'love', 'marriage', 'partner', 'soulmate', 'breakup', 'break up', 'divorce', 'romance', 'husband', 'wife']),
+    ('Confidence',            ['confidence', 'confident', 'self-worth', 'self worth', 'self esteem', 'self-esteem', 'self love', 'self-love', 'self doubt', 'self-doubt']),
+    ('Reduce Stress & Anxiety', ['stress', 'anxiet', 'overthink', 'worry', 'calm', 'panic', 'burnout', 'overwhelm', 'relax', 'emotional', 'emotions']),
+    ('Physical Appearance',   ['appearance', 'beauty', 'glow', 'skin', 'hair', 'weight', 'posture', 'radiant', 'younger', 'anti-ag', 'wrinkle', 'slim', 'fat loss', 'face yoga', 'facial', 'features', 'ageless', 'looks']),
+    # ---- kept existing categories (relevant, non-overlapping) ----
+    ('Tarot',                 ['tarot']),
+    ('Angel',                 ['angel']),
+    ('Chakra',                ['chakra']),
+    ('Numerology',            ['numerolog']),
+    ('Astrology',             ['astro', 'zodiac', 'horoscope', 'nakshatra']),
+    ('Moon',                  ['moon']),
+    ('Protection & Evil Eye', ['nazar', 'evil eye', 'protection', 'psychic attack', 'shield', 'black magic']),
+    ('Psychic & Activation',  ['psychic', 'intuition', 'third eye', 'clairvoy', 'sixth sense', 'activation', 'activate', 'awaken', 'abilities', 'telepath']),
+    ('Devotional & Deity',    ['sadhana', 'naamjap', 'namjap', 'hanuman', 'gita', 'ganesh', 'durga', 'lakshmi', 'shiv', 'krishna', 'kali', 'sai', 'buddha', 'puja', 'pooja', 'vidhi', 'bhajan', 'kirtan', 'chant', 'mantra', 'prayer', 'navratri', 'shani']),
+    ('Dreams',                ['dream']),
+    ('Sleep',                 ['sleep', 'insomnia']),
+    ('Meditation',            ['meditat', 'mindful']),
+    ('Yoga',                  ['yoga']),
+    ('Breathwork',            ['breath', 'pranayam']),
+    ('Energy & Aura',         ['energy', 'aura', 'vibration', 'frequency']),
+    ('Healing',               ['heal']),
+    ('Clarity & Mind',        ['clarity', 'focus', 'mental', 'conscious', 'awareness', 'decision', 'mind']),
+    ('Soul & Spirit',         ['soul', 'spirit', 'divine', 'god', 'dharma', 'purpose', 'transform', 'journey']),
 ]
 def main_kw(name):
     n = str(name).lower()
@@ -139,7 +142,8 @@ def main_kw(name):
             if p in n:
                 return title
     return 'Other'
-df['main_keyword'] = df['name_clean'].apply(main_kw)
+# Classify on the SHORT name (disp_name), per request.
+df['main_keyword'] = df['disp_name'].apply(main_kw)
 
 # Save
 df.to_csv('merged_analysis.csv', index=False)
