@@ -204,6 +204,10 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div class="card"><div id="mom-dow"></div></div>
   <h2>Hour of day — month on month <span class="sub">one line per month · x = hour (IST)</span></h2>
   <div class="card"><div id="mom-hour"></div></div>
+  <h2>Keyword by topic — month on month <span class="sub">main theme · rows = topic, one column per month</span></h2>
+  <div class="card"><div id="mom-kw-theme-note" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div><div id="mom-kw-theme"></div></div>
+  <h2>Keyword occurrence — month on month <span class="sub">multi-tag · rows = keyword, one column per month</span></h2>
+  <div class="card"><div id="mom-kw-multi-note" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div><div id="mom-kw-multi"></div></div>
 </div><!-- /mom-view -->
 
 <div id="leaders-view" style="display:none">
@@ -592,6 +596,37 @@ function renderMoM(){
  const hourSeries=MONTHS_JS.map((m,i)=>({name:m.replace(' 2026',''),color:MONTH_COLORS[i],
    values:hours.map(h=>{const r=M.hour.find(x=>x.month===m&&x.hour===h);return r?met.get(r):0;})})).filter(s=>monthsOn.has(s.name));
  lineChart(document.getElementById('mom-hour'), hours.map(h=>String(h).padStart(2,'0')), hourSeries, met.f);
+ // keyword tables — month on month, following the metric selector
+ const kwMet=(met.k==='cart_pct'||met.k==='sale_pct'||met.k==='session_pv')?met.k:'session_pv';
+ const kwLbl=kwMet==='cart_pct'?'Add-to-cart %':kwMet==='sale_pct'?'Purchase %':'Session PVs';
+ const kwFallback=kwMet!==met.k;
+ const noteHtml=`Each month column shows <b>${kwLbl}</b> for sessions scheduled that month.`
+   +(kwFallback?` <i>(“${met.label.split(' (')[0]}” isn’t a per-keyword metric — showing Session PVs instead.)</i>`:'')
+   +` Rows sorted by total PV; click a header to re-sort, or search.`;
+ document.getElementById('mom-kw-theme-note').innerHTML=noteHtml;
+ document.getElementById('mom-kw-multi-note').innerHTML=noteHtml;
+ kwMomTable(document.getElementById('mom-kw-theme'), M.kw_theme||[], kwMet, 'Topic');
+ kwMomTable(document.getElementById('mom-kw-multi'), M.kw_multi||[], kwMet, 'Keyword');
+}
+// Pivot flat [{key,month,n,pv,carts,sales}] into a month-column table (one column per active month).
+function kwMomTable(el, flat, metK, noun){
+ const activeMonths=MONTHS_JS.filter(m=>monthsOn.has(m.replace(' 2026','')));
+ const isPct=metK==='cart_pct'||metK==='sale_pct';
+ const cellVal=a=>!a||!a.n?null:(metK==='cart_pct'?(a.pv?100*a.carts/a.pv:0)
+   :metK==='sale_pct'?(a.pv?100*a.sales/a.pv:0):a.pv);
+ const cellTxt=a=>{const v=cellVal(a);return v==null?'<span style="color:var(--muted)">·</span>':(isPct?pct1(v):fmt(v));};
+ const by={};
+ flat.forEach(r=>{(by[r.key]=by[r.key]||{})[r.month]={n:r.n,pv:r.pv,carts:r.carts,sales:r.sales};});
+ const rows=Object.keys(by).map(k=>{
+   const m=by[k]; let tot=0; activeMonths.forEach(mo=>{tot+=m[mo]?m[mo].pv:0;});
+   return {key:k,m,total:tot};
+ }).filter(r=>r.total>0);
+ const cols=[{label:noun,get:r=>esc(r.key),val:r=>r.key,align:'left'}];
+ activeMonths.forEach(mo=>cols.push({label:mo.replace(' 2026',''),
+   get:r=>cellTxt(r.m[mo]),val:r=>{const v=cellVal(r.m[mo]);return v==null?-1:v;}}));
+ cols.push({label:'Total PV',get:r=>fmt(r.total),val:r=>r.total});
+ makeTable(el,{rows,cols,searchGet:r=>r.key,placeholder:'Search '+noun.toLowerCase()+'…',
+   noun:noun.toLowerCase(),sortCol:cols.length-1,sortDir:-1});
 }
 
 // ---- global month selector (month-series charts only) ----
