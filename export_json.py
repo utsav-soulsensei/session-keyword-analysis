@@ -372,8 +372,93 @@ def leader_detail(sub):
     d['kwtable_sessions']=ks
     return d
 
+# ---- Online Non-Faith (without top 4 leaders) deep-dive ----
+# Faith = the whole Devotional & Deity theme + any session whose short name carries a
+# deity / scripture / religious-practice term (these hide inside Other, Psychic, Womb Healing, ...).
+FAITH_PATTERNS=[r'hanuman',r'\bshiv\b',r'shiva',r'mahadev',r'\bkali\b',r'mahakali',r'durga',r'lakshmi',r'laxmi',
+ r'krishna',r'radh',r'shyam',r'sai baba',r'ganesh',r'ganpati',r'saraswati',r'sarawati',r'vishnu',r'\bdevi\b',
+ r'deviyo',r'\bmaa\b',r'\bmata\b',r'mahatmya',r'bhuvaneshwari',r'tripurasundari',r'lalita',r'shani',r'surya',
+ r'kamakhya',r'shakti',r'mahavidya',r'green tara',r'kuan yin',r'jagganath',r'jagannath',r'ishwar',r'gayatri',
+ r'mrityunjay',r'sri vidya',r'bhajan',r'kirtan',r'sadhana',r'sādhana',r'mantra',r'chant',r'naam jap',r'\bjaap\b',
+ r'chalisa',r'sahasranama',r'satsang',r'\bvrat\b',r'pooja',r'\bpuja\b',r'aarti',r'sundar kand',r'ramayan',
+ r'somvaar',r'mangalwar',r'sade sati',r'\bvedic\b',r'shaman',r'chowki',r'\btao\b',r'punarjanam']
+FAITH_RX=re.compile('|'.join(FAITH_PATTERNS))
+def _is_faith(frame):
+    nm=frame['disp_name'].astype(str).str.lower().str.replace('’',"'",regex=False)
+    return (frame['main_keyword']=='Devotional & Deity') | nm.str.contains(FAITH_RX)
+
+SUB_STOP=set("the a an and or of to for with your yourself you it is are be at as from this that into in on off out up we our my his her their them they how not no do dont your ke se ki ka apne apni apna kare kar kijiye ko me mein aur hai ho na ne bane badhane raaz secret through without more less than then now new naturally let go lasting each".split())
+SUB_GENERIC=set("heal healing reset session live series day workshop masterclass class clear release balance align activate awaken master learn find break unlock remove connect improve".split())
+def _subtype_labels(sub, theme):
+    """Auto sub-type: group a theme's sessions by the dominant keyword in their names."""
+    theme_words=set(re.findall(r"[a-z']+", theme.lower()))
+    per={}; tok_sess={}; tok_pv={}
+    for nm,g in sub.groupby('disp_name'):
+        toks={w for w in re.findall(r"[a-z']+", str(nm).lower()) if len(w)>2 and w not in SUB_STOP}
+        per[nm]=toks; pv=g['PV'].sum()
+        for t in toks:
+            tok_sess.setdefault(t,set()).add(nm); tok_pv[t]=tok_pv.get(t,0)+pv
+    cand=[t for t in tok_sess if len(tok_sess[t])>=2 and t not in theme_words and t not in SUB_GENERIC]
+    cand.sort(key=lambda t:-tok_pv[t])
+    lab={}
+    for nm,toks in per.items():
+        hit=[c for c in cand if c in toks]
+        lab[nm]=hit[0].title() if hit else 'Other'
+    return lab
+
+def _rate_rows(frame, groupcol, order=None, keyname='key'):
+    out=[]
+    for k,g in frame.groupby(groupcol):
+        pv=g['PV'].sum()
+        out.append({keyname:str(k),'n':int(len(g)),'sess':int(g['disp_name'].nunique()),
+                    'PV':int(pv),'avgPV':int(round(pv/len(g))) if len(g) else 0,
+                    'cart':float(100*g['carts'].sum()/pv) if pv else 0,
+                    'sale':float(100*g['sales'].sum()/pv) if pv else 0})
+    if order: out=sorted(out,key=lambda r: order.index(r[keyname]) if r[keyname] in order else 999)
+    else: out=sorted(out,key=lambda r:-r['PV'])
+    return out
+
+def _theme_deepdive(sub, theme):
+    lab=_subtype_labels(sub, theme)
+    sub=sub.assign(_sub=sub['disp_name'].map(lab))
+    pv=sub['PV'].sum()
+    return {
+      'overall':{'inst':int(len(sub)),'sess':int(sub['disp_name'].nunique()),'PV':int(pv),
+                 'avgPV':int(round(pv/len(sub))) if len(sub) else 0,
+                 'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
+                 'sale':float(100*sub['sales'].sum()/pv) if pv else 0},
+      'subtypes':_rate_rows(sub,'_sub'),
+      'sessions':_rate_rows(sub,'disp_name'),
+      'dow':_rate_rows(sub,'dow_name',DOW_ORDER),
+      'time':_rate_rows(sub,'time_bucket',TIME_ORDER),
+    }
+
+def nonfaith_block(online_no4):
+    c=online_no4[online_no4['startIST']>=CUTOFF].copy()
+    faith=_is_faith(c)
+    n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
+    c=c[~faith].copy()
+    totalPV=c['PV'].sum()
+    tstat=c.groupby('main_keyword').agg(sess=('disp_name','nunique'),PV=('PV','sum'))
+    meaningful=[t for t in tstat.index if t!='Other' and
+                (tstat.loc[t,'sess']>=5 or 100*tstat.loc[t,'PV']/totalPV>=1.0)]
+    c['tab']=c['main_keyword'].where(c['main_keyword'].isin(meaningful),'Other')
+    overview=_rate_rows(c,'tab'); [r.update({'PV_pct':round(100*r['PV']/totalPV,1)}) for r in overview]
+    themes={k:_theme_deepdive(g,k) for k,g in c.groupby('tab')}
+    return {
+      'overall':{'inst':int(len(c)),'sess':int(c['disp_name'].nunique()),'PV':int(totalPV),
+                 'avgPV':int(round(totalPV/len(c))) if len(c) else 0,
+                 'cart':float(100*c['carts'].sum()/totalPV) if totalPV else 0,
+                 'sale':float(100*c['sales'].sum()/totalPV) if totalPV else 0,
+                 'removed_faith':int(faith.sum()),'removed_devotional':n_dev},
+      'order':[r['key'] for r in overview],
+      'overview':overview,
+      'themes':themes,
+    }
+
 df = pd.read_csv('merged_analysis.csv')
 df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
+df = df[df['price'] > 0].copy()   # exclude free (price == 0) sessions from all analytics
 no4 = df[~df['leader_name'].isin(EXCLUDE)].copy()
 online_no4 = no4[no4['type'] != 'OFFLINE'].copy()
 out = {
@@ -388,6 +473,7 @@ out = {
         'all': mom_block(df, SITE_ALL_RAW, SITE_HOUR_ALL_RAW),
         'no4': mom_block(online_no4, SITE_NO4_RAW, SITE_HOUR_NO4_RAW),
     },
+    'nonfaith': nonfaith_block(online_no4),
     'leaders_detail': {
         L: leader_detail(df[(df['leader_name']==L) & (df['type']!='OFFLINE') & (df['startIST']>=LEAD_CUTOFF)].copy())
         for L in LEAD_ORDER
