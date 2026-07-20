@@ -602,14 +602,21 @@ function renderMoM(){
  const kwFallback=kwMet!==met.k;
  const noteHtml=`Each month column shows <b>${kwLbl}</b> for sessions scheduled that month.`
    +(kwFallback?` <i>(“${met.label.split(' (')[0]}” isn’t a per-keyword metric — showing Session PVs instead.)</i>`:'')
-   +` Rows sorted by total PV; click a header to re-sort, or search.`;
+   +` Rows sorted by total PV; click a header to re-sort. <b>Click a row</b> for its top 5 sessions (all months).`;
  document.getElementById('mom-kw-theme-note').innerHTML=noteHtml;
  document.getElementById('mom-kw-multi-note').innerHTML=noteHtml;
- kwMomTable(document.getElementById('mom-kw-theme'), M.kw_theme||[], kwMet, 'Topic');
- kwMomTable(document.getElementById('mom-kw-multi'), M.kw_multi||[], kwMet, 'Keyword');
+ kwMomTable(document.getElementById('mom-kw-theme'), M.kw_theme||[], kwMet, 'Topic', M.kw_theme_sess||{});
+ kwMomTable(document.getElementById('mom-kw-multi'), M.kw_multi||[], kwMet, 'Keyword', M.kw_multi_sess||{});
+}
+// names-only drill: top 5 session short names for a keyword, pooled across all months
+function namesDrill(names){
+ if(!names||!names.length) return '<div class="thost" style="padding:8px 10px;color:var(--muted)">No sessions.</div>';
+ return '<div class="thost"><table><thead><tr><th style="text-align:left">Top 5 sessions by demand · all months</th></tr></thead><tbody>'
+   +names.map(n=>`<tr><td class="dname" style="text-align:left">${esc(n)}</td></tr>`).join('')
+   +'</tbody></table></div>';
 }
 // Pivot flat [{key,month,n,pv,carts,sales}] into a month-column table (one column per active month).
-function kwMomTable(el, flat, metK, noun){
+function kwMomTable(el, flat, metK, noun, sessMap){
  const activeMonths=MONTHS_JS.filter(m=>monthsOn.has(m.replace(' 2026','')));
  const isPct=metK==='cart_pct'||metK==='sale_pct';
  const cellVal=a=>!a||!a.n?null:(metK==='cart_pct'?(a.pv?100*a.carts/a.pv:0)
@@ -626,7 +633,8 @@ function kwMomTable(el, flat, metK, noun){
    get:r=>cellTxt(r.m[mo]),val:r=>{const v=cellVal(r.m[mo]);return v==null?-1:v;}}));
  cols.push({label:'Total PV',get:r=>fmt(r.total),val:r=>r.total});
  makeTable(el,{rows,cols,searchGet:r=>r.key,placeholder:'Search '+noun.toLowerCase()+'…',
-   noun:noun.toLowerCase(),sortCol:cols.length-1,sortDir:-1});
+   noun:noun.toLowerCase(),sortCol:cols.length-1,sortDir:-1,
+   expandGet:r=>namesDrill((sessMap||{})[r.key])});
 }
 
 // ---- global month selector (month-series charts only) ----

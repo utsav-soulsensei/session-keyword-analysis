@@ -277,25 +277,36 @@ def build(df, single_kw=False, site_dow=None, site_block=None, site_scope='all',
     d['monthly']=sorted(mt,key=lambda r:r['key'])
     return d
 
+def _top5_names(sub):
+    """Top 5 distinct session short names by demand (total PV), pooled across all months.
+       Recurring sessions share a short name, so aggregate by name before ranking."""
+    agg = sub.groupby('disp_name')['PV'].sum().sort_values(ascending=False)
+    return [str(n) for n in agg.head(5).index]
+
 def kw_by_month(pv):
     """Per-month keyword aggregates (by scheduled month) for both keyword tables:
-       theme = main_keyword grouping; multi = user's multi-tag KW2 list (matched on short name)."""
-    theme_rows=[]
+       theme = main_keyword grouping; multi = user's multi-tag KW2 list (matched on short name).
+       Also returns top-5 session short names per keyword, pooled across all months."""
+    theme_rows=[]; theme_sess={}
     for (m,key),sub in pv.groupby(['mlabel','main_keyword']):
         theme_rows.append({'key':str(key),'month':m,'n':int(len(sub)),'pv':int(sub['PV'].sum()),
                            'carts':int(round(sub['carts'].sum())),'sales':int(round(sub['sales'].sum()))})
+    for key,sub in pv.groupby('main_keyword'):
+        theme_sess[str(key)]=_top5_names(sub)
     name = pv['disp_name'].astype(str).str.lower().str.replace('’', "'", regex=False)
-    multi_rows=[]
+    multi_rows=[]; multi_sess={}
     for label,pats in KW2:
         mask=None
         for p in pats:
             mm=name.str.contains(re.escape(p), regex=True)
             mask = mm if mask is None else (mask | mm)
         matched=pv[mask.values]
+        if len(matched)==0: continue
+        multi_sess[label]=_top5_names(matched)
         for m,sub in matched.groupby('mlabel'):
             multi_rows.append({'key':label,'month':m,'n':int(len(sub)),'pv':int(sub['PV'].sum()),
                                'carts':int(round(sub['carts'].sum())),'sales':int(round(sub['sales'].sum()))})
-    return theme_rows, multi_rows
+    return theme_rows, multi_rows, theme_sess, multi_sess
 
 def mom_block(dfc, site_dow_raw, site_hour_raw):
     """Month-on-month: platform PV + session funnel (PV/carts/sales) by month x DOW and x hour."""
@@ -320,8 +331,9 @@ def mom_block(dfc, site_dow_raw, site_hour_raw):
             s=shour.get((m,h),(0,0,0))
             hour_rows.append({'month':m,'hour':h,'platform_pv':int(plat_hour.get((m,h),0)),
                               'session_pv':int(s[0]),'carts':int(round(s[1])),'sales':int(round(s[2]))})
-    kw_theme, kw_multi = kw_by_month(pv)
-    return {'dow':dow_rows,'hour':hour_rows,'kw_theme':kw_theme,'kw_multi':kw_multi}
+    kw_theme, kw_multi, kw_theme_sess, kw_multi_sess = kw_by_month(pv)
+    return {'dow':dow_rows,'hour':hour_rows,'kw_theme':kw_theme,'kw_multi':kw_multi,
+            'kw_theme_sess':kw_theme_sess,'kw_multi_sess':kw_multi_sess}
 
 # ---- Per-leader deep-dive (top 4 leaders, online only, last ~6 months) ----
 LEAD_ORDER = ['Kavyal Sedanni','Dr. Tamanna C','Dr. Rashmi N Muthalkar','Munisha Khatwani']
