@@ -536,7 +536,16 @@ def _assemble_segment(c):
     order=ranked+(['Others'] if 'Others' in rows else [])
     overview=[rows[k] for k in order]
     themes={k:_theme_deepdive(c[c['tab']==k],k) for k in order}
-    return totalPV,order,overview,themes
+    # flat list of every session in the segment, tagged with its theme/family
+    allsess=[]
+    for nm,g in c.groupby('disp_name'):
+        pv=g['PV'].sum()
+        allsess.append({'key':str(nm),'tab':str(g['tab'].iloc[0]),'n':int(len(g)),'PV':int(pv),
+                        'avgPV':int(round(pv/len(g))) if len(g) else 0,
+                        'cart':float(100*g['carts'].sum()/pv) if pv else 0,
+                        'sale':float(100*g['sales'].sum()/pv) if pv else 0})
+    allsess.sort(key=lambda r:-r['PV'])
+    return totalPV,order,overview,themes,allsess
 
 def _seg_overall(c,totalPV,extra):
     d={'inst':int(len(c)),'sess':int(c['disp_name'].nunique()),'PV':int(totalPV),
@@ -553,9 +562,9 @@ def nonfaith_block(online_no4):
     tp=c[c['main_keyword']!='Other'].groupby('main_keyword')['PV'].sum().sort_values(ascending=False)
     top10=list(tp.index[:10])
     c['tab']=c['main_keyword'].where(c['main_keyword'].isin(top10),'Others')
-    totalPV,order,overview,themes=_assemble_segment(c)
+    totalPV,order,overview,themes,allsess=_assemble_segment(c)
     return {'overall':_seg_overall(c,totalPV,{'removed_faith':int(faith.sum()),'removed_devotional':n_dev}),
-            'order':order,'overview':overview,'themes':themes}
+            'order':order,'overview':overview,'themes':themes,'sessions':allsess}
 
 def faith_block(online_no4):
     """The faith sessions removed from the Non-Faith tab, grouped by deity/practice family."""
@@ -563,9 +572,9 @@ def faith_block(online_no4):
     c=c[_is_faith(c)].copy()
     n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
     c['tab']=c['disp_name'].map(_faith_family)
-    totalPV,order,overview,themes=_assemble_segment(c)
+    totalPV,order,overview,themes,allsess=_assemble_segment(c)
     return {'overall':_seg_overall(c,totalPV,{'n_devotional':n_dev,'n_other':int(len(c))-n_dev}),
-            'order':order,'overview':overview,'themes':themes}
+            'order':order,'overview':overview,'themes':themes,'sessions':allsess}
 
 df = pd.read_csv('merged_analysis.csv')
 df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')

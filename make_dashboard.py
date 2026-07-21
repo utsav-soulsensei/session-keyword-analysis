@@ -752,7 +752,9 @@ function segGeneral(body,D,M){
  const gn=M.groupNoun, GN=gn.charAt(0).toUpperCase()+gn.slice(1);
  body.innerHTML=`<div class="kpis kbox"></div><div class="ibox"></div>`
   +`<h2>${GN==='Family'?'Families':'Themes'} by demand <span class="sub">sorted by total PV · click a header to sort</span></h2>`
-  +`<div class="card"><div class="ovbox"></div></div>`;
+  +`<div class="card"><div class="ovbox"></div></div>`
+  +`<h2>All sessions <span class="sub">every session in this segment · runs = times scheduled · search or sort</span></h2>`
+  +`<div class="card"><div class="allbox"></div></div>`;
  body.querySelector('.kbox').innerHTML=kpiRow(D.overall);
  body.querySelector('.ibox').innerHTML=`<div class="insight">${M.general}</div>`;
  makeTable(body.querySelector('.ovbox'),{
@@ -763,6 +765,17 @@ function segGeneral(body,D,M){
      {label:'Runs',get:r=>r.n,val:r=>r.n},
      {label:'Total PV',get:r=>fmt(r.PV),val:r=>r.PV},
      {label:'PV %',get:r=>r.PV_pct.toFixed(1)+'%',val:r=>r.PV_pct},
+     {label:'Avg PV/run',get:r=>fmt(r.avgPV),val:r=>r.avgPV},
+     {label:'Add-to-cart',get:r=>pct(r.cart),val:r=>r.cart},
+     {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
+   ]});
+ makeTable(body.querySelector('.allbox'),{
+   rows:D.sessions||[], searchGet:r=>r.key+' '+r.tab, placeholder:'Search sessions…', noun:'sessions', sortCol:3, sortDir:-1,
+   cols:[
+     {label:'Session',get:r=>esc(r.key),val:r=>r.key,align:'left'},
+     {label:GN,get:r=>esc(r.tab),val:r=>r.tab,align:'left'},
+     {label:'Runs',get:r=>r.n,val:r=>r.n},
+     {label:'Total PV',get:r=>fmt(r.PV),val:r=>r.PV},
      {label:'Avg PV/run',get:r=>fmt(r.avgPV),val:r=>r.avgPV},
      {label:'Add-to-cart',get:r=>pct(r.cart),val:r=>r.cart},
      {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
