@@ -387,6 +387,28 @@ def _is_faith(frame):
     nm=frame['disp_name'].astype(str).str.lower().str.replace('’',"'",regex=False)
     return (frame['main_keyword']=='Devotional & Deity') | nm.str.contains(FAITH_RX)
 
+# Faith taxonomy: deity/practice families, priority-ordered (first match wins).
+# Named deities & astrology match BEFORE generic practice (so "Shani Dev Ki Sadhana" -> Astrology,
+# "Bhajan Jamming Hanuman" -> Hanuman); auto sub-types then split each family (Hanuman -> Sadhana vs Bhajan).
+FAITH_FAMILIES=[
+ ('Hanuman',[r'hanuman',r'chalisa',r'sundar kand',r'bajrang']),
+ ('Shiva & Mahadev',[r'\bshiv\b',r'shiva',r'mahadev',r'mahamrityunjay',r'mrityunjay',r'pradosh']),
+ ('Devi & Goddess',[r'\bdevi\b',r'deviyo',r'durga',r'\bkali\b',r'mahakali',r'lalita',r'tripurasundari',r'bhuvaneshwari',r'kamakhya',r'saraswati',r'sarawati',r'mahavidya',r'mahatmya',r'chowki',r'shakti',r'baglamukhi',r'sri vidya',r'\btara\b']),
+ ('Krishna & Radha',[r'krishna',r'radh',r'shyam']),
+ ('Lakshmi & Prosperity',[r'lakshmi',r'laxmi']),
+ ('Other Deities',[r'\bsai\b',r'ganesh',r'ganpati',r'vishnu',r'jagganath',r'jagannath',r'green tara',r'kuan yin',r'gayatri',r'ishwar',r'surya']),
+ ('Astrology & Vedic',[r'shani',r'sade sati',r'\bvedic\b',r'somvaar',r'mangalwar',r'\bvrat\b']),
+ ('Sadhana & Mantra',[r'sadhana',r'sādhana',r'mantra',r'\bjaap\b',r'naam jap',r'chant',r'sahasranama',r'pooja',r'\bpuja\b',r'aarti',r'satsang']),
+ ('Kirtan & Bhajan',[r'kirtan',r'bhajan',r'jamming']),
+ ('Shamanic & Other',[r'shaman',r'\btao\b',r'punarjanam']),
+]
+FAITH_FAMILIES=[(lab,re.compile('|'.join(pats))) for lab,pats in FAITH_FAMILIES]
+def _faith_family(name):
+    n=str(name).lower().replace('’',"'")
+    for lab,rgx in FAITH_FAMILIES:
+        if rgx.search(n): return lab
+    return 'Others'
+
 SUB_STOP=set("the a an and or of to for with your yourself you it is are be at as from this that into in on off out up we our my his her their them they how not no do dont your ke se ki ka apne apni apna kare kar kijiye ko me mein aur hai ho na ne bane badhane raaz secret through without more less than then now new naturally let go lasting each".split())
 SUB_GENERIC=set("heal healing reset session live series day workshop masterclass class clear release balance align activate awaken master learn find break unlock remove connect improve".split())
 def _subtype_labels(sub, theme):
@@ -504,31 +526,46 @@ def _theme_deepdive(sub, theme):
       'time':_rate_rows(sub,'time_bucket',TIME_ORDER),
     }
 
+def _assemble_segment(c):
+    """Given a cohort dataframe with a 'tab' column, build order/overview/themes.
+       Tabs ranked by PV desc; an 'Others' tab (if present) is pinned last."""
+    totalPV=c['PV'].sum()
+    rows={r['key']:r for r in _rate_rows(c,'tab')}
+    for r in rows.values(): r['PV_pct']=round(100*r['PV']/totalPV,1) if totalPV else 0
+    ranked=sorted([k for k in rows if k!='Others'],key=lambda k:-rows[k]['PV'])
+    order=ranked+(['Others'] if 'Others' in rows else [])
+    overview=[rows[k] for k in order]
+    themes={k:_theme_deepdive(c[c['tab']==k],k) for k in order}
+    return totalPV,order,overview,themes
+
+def _seg_overall(c,totalPV,extra):
+    d={'inst':int(len(c)),'sess':int(c['disp_name'].nunique()),'PV':int(totalPV),
+       'avgPV':int(round(totalPV/len(c))) if len(c) else 0,
+       'cart':float(100*c['carts'].sum()/totalPV) if totalPV else 0,
+       'sale':float(100*c['sales'].sum()/totalPV) if totalPV else 0}
+    d.update(extra); return d
+
 def nonfaith_block(online_no4):
     c=online_no4[online_no4['startIST']>=CUTOFF].copy()
-    faith=_is_faith(c)
-    n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
+    faith=_is_faith(c); n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
     c=c[~faith].copy()
-    totalPV=c['PV'].sum()
     # top 10 real themes by PV get their own tab; everything else -> 'Others'
     tp=c[c['main_keyword']!='Other'].groupby('main_keyword')['PV'].sum().sort_values(ascending=False)
     top10=list(tp.index[:10])
     c['tab']=c['main_keyword'].where(c['main_keyword'].isin(top10),'Others')
-    rows={r['key']:r for r in _rate_rows(c,'tab')}
-    for r in rows.values(): r['PV_pct']=round(100*r['PV']/totalPV,1)
-    order=[t for t in top10 if t in rows]+(['Others'] if 'Others' in rows else [])  # Others pinned last
-    overview=[rows[k] for k in order]
-    themes={k:_theme_deepdive(c[c['tab']==k],k) for k in order}
-    return {
-      'overall':{'inst':int(len(c)),'sess':int(c['disp_name'].nunique()),'PV':int(totalPV),
-                 'avgPV':int(round(totalPV/len(c))) if len(c) else 0,
-                 'cart':float(100*c['carts'].sum()/totalPV) if totalPV else 0,
-                 'sale':float(100*c['sales'].sum()/totalPV) if totalPV else 0,
-                 'removed_faith':int(faith.sum()),'removed_devotional':n_dev},
-      'order':order,
-      'overview':overview,
-      'themes':themes,
-    }
+    totalPV,order,overview,themes=_assemble_segment(c)
+    return {'overall':_seg_overall(c,totalPV,{'removed_faith':int(faith.sum()),'removed_devotional':n_dev}),
+            'order':order,'overview':overview,'themes':themes}
+
+def faith_block(online_no4):
+    """The faith sessions removed from the Non-Faith tab, grouped by deity/practice family."""
+    c=online_no4[online_no4['startIST']>=CUTOFF].copy()
+    c=c[_is_faith(c)].copy()
+    n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
+    c['tab']=c['disp_name'].map(_faith_family)
+    totalPV,order,overview,themes=_assemble_segment(c)
+    return {'overall':_seg_overall(c,totalPV,{'n_devotional':n_dev,'n_other':int(len(c))-n_dev}),
+            'order':order,'overview':overview,'themes':themes}
 
 df = pd.read_csv('merged_analysis.csv')
 df['startIST'] = pd.to_datetime(df['startIST'], errors='coerce')
@@ -548,6 +585,7 @@ out = {
         'no4': mom_block(online_no4, SITE_NO4_RAW, SITE_HOUR_NO4_RAW),
     },
     'nonfaith': nonfaith_block(online_no4),
+    'faith': faith_block(online_no4),
     'leaders_detail': {
         L: leader_detail(df[(df['leader_name']==L) & (df['type']!='OFFLINE') & (df['startIST']>=LEAD_CUTOFF)].copy())
         for L in LEAD_ORDER

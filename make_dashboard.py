@@ -250,6 +250,12 @@ th.sortable .ar{color:var(--s1);font-size:10px;}
   <div id="nf-body"></div>
 </div><!-- /nonfaith-view -->
 
+<div id="faith-view" style="display:none">
+  <div class="momctrl"><div class="grp"><span class="lbl">Deity / practice</span><div class="pillrow" id="fa-tabs"></div></div></div>
+  <div id="fa-note" style="font-size:12px;color:var(--muted);margin:6px 0 4px"></div>
+  <div id="fa-body"></div>
+</div><!-- /faith-view -->
+
 <div class="foot">Sheet1 (funnel) + Sheet2 (course info), joined on instance id · rates are PV-weighted</div>
 </div>
 
@@ -708,48 +714,51 @@ function renderLeaders(){
    ]});
 }
 
-// ---- Online Non-Faith (without top 4 leaders) tab ----
-let curNF='__general__';
-const NF_COLS=noun=>[
- {label:noun,get:r=>esc(r.key),val:r=>r.key,align:'left'},
- {label:'Sessions',get:r=>r.sess,val:r=>r.sess},
- {label:'Runs',get:r=>r.n,val:r=>r.n},
- {label:'Total PV',get:r=>fmt(r.PV),val:r=>r.PV},
- {label:'Avg PV/run',get:r=>fmt(r.avgPV),val:r=>r.avgPV},
- {label:'Add-to-cart',get:r=>pct(r.cart),val:r=>r.cart},
- {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
-];
+// ---- Segment tabs (Online Non-Faith / Faith) — shared deep-analysis renderer ----
 const dowAb=k=>k.slice(0,3);
-function renderNonFaith(){
- const NF=DATA.nonfaith, o=NF.overall;
- const tabs=[['__general__','General']].concat(NF.order.map(k=>[k,k]));
- document.getElementById('nf-tabs').innerHTML=tabs.map(t=>
-   `<button class="pill ${curNF===t[0]?'on':''}" data-nf="${esc(t[0])}">${esc(t[1])}</button>`).join('');
- document.querySelectorAll('#nf-tabs .pill').forEach(b=>b.onclick=()=>{curNF=b.dataset.nf;renderNonFaith();});
- document.getElementById('nf-note').innerHTML=`<b>${o.inst}</b> online sessions (${o.sess} distinct) after removing <b>${o.removed_faith} faith sessions</b> `
-   +`(${o.removed_devotional} Devotional & Deity + ${o.removed_faith-o.removed_devotional} deity/scripture sessions hiding in other themes). From 1 Apr 2026, excl. top-4 leaders & offline.`;
- const body=document.getElementById('nf-body');
- if(curNF==='__general__') nfGeneral(body,NF); else nfTheme(body,curNF,NF.themes[curNF]);
-}
-function nfGeneral(body,NF){
- const o=NF.overall;
- body.innerHTML=`<div class="kpis" id="nf-kpis"></div><div id="nf-ins"></div>`
-  +`<h2>Themes by demand <span class="sub">non-faith · sorted by total PV · click a header to sort</span></h2>`
-  +`<div class="card"><div id="nf-ov"></div></div>`;
- document.getElementById('nf-kpis').innerHTML=[
+const kpiRow=o=>[
    ['Sessions',o.inst,o.sess+' distinct'],['Total demand (PV)',fmt(o.PV),'page views'],
    ['Avg PV / run',fmt(o.avgPV),'per session'],['Add-to-cart',o.cart.toFixed(2)+'%','weighted'],
    ['Conversion',o.sale.toFixed(2)+'%','weighted'],
  ].map(k=>`<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div><div class="d">${k[2]}</div></div>`).join('');
- ins('nf-ins',`<b>The non-faith business is a mid-week, practical-healing engine.</b> `
-  +`<b>Physical Appearance</b> & <b>Abundance</b> lead on volume, but <b>Chakra</b> is the strongest large theme — high reach per run <i>and</i> the best conversion. Two levers repeat everywhere: `
-  +`<b>(1) reach ≠ conversion</b> — the biggest-PV sessions (Ageless Longevity 0.22%, Clear Money Blocks 0.04%, Remove Nazar 0.11%) barely sell, while smaller sessions convert 1–2%. `
-  +`<b>(2) Day/time flips vs faith</b> — demand peaks <b>mid-week (Wed/Tue/Thu)</b>, not the weekend; conversion is best <b>Mon & Fri</b>. By slot, <b>evening (6–9pm) pulls ~42% of views but converts worst (~0.7%)</b>, while <b>night (9pm+) converts best (~1.5%)</b> on small volume. `
-  +`Scale the practical-healing themes on their strong days; treat high-reach flagship sessions as top-of-funnel, and push the higher-intent night/weekday-evening slots for conversion.`);
- makeTable(document.getElementById('nf-ov'),{
-   rows:NF.overview, searchGet:r=>r.key, placeholder:'Search themes…', noun:'themes', sortCol:3, sortDir:-1,
+const SEG={
+ nonfaith:{pfx:'nf', groupNoun:'theme',
+   note:o=>`<b>${o.inst}</b> online sessions (${o.sess} distinct) after removing <b>${o.removed_faith} faith sessions</b> `
+     +`(${o.removed_devotional} Devotional & Deity + ${o.removed_faith-o.removed_devotional} deity/scripture sessions hiding in other themes). From 1 Apr 2026, excl. top-4 leaders & offline.`,
+   general:`<b>The non-faith business is a mid-week, practical-healing engine.</b> `
+    +`<b>Physical Appearance</b> & <b>Abundance</b> lead on volume, but <b>Chakra</b> is the strongest large theme — high reach per run <i>and</i> the best conversion. Two levers repeat everywhere: `
+    +`<b>(1) reach ≠ conversion</b> — the biggest-PV sessions (Ageless Longevity 0.22%, Clear Money Blocks 0.04%, Remove Nazar 0.11%) barely sell, while smaller sessions convert 1–2%. `
+    +`<b>(2) Day/time</b> — demand peaks <b>mid-week (Wed/Tue/Thu)</b>; conversion is best <b>Mon & Fri</b>. Evening (6–9pm) pulls ~42% of views but converts worst (~0.7%); <b>night (9pm+) converts best (~1.5%)</b> on small volume. `
+    +`Scale practical-healing themes on their strong days; treat high-reach flagships as top-of-funnel; push night/weekday-evening slots for conversion.`},
+ faith:{pfx:'fa', groupNoun:'family',
+   note:o=>`<b>${o.inst}</b> faith sessions (${o.sess} distinct) — the exact set removed from the Non-Faith tab: the whole <b>Devotional & Deity</b> theme (${o.n_devotional}) plus <b>${o.n_other}</b> deity/scripture sessions from other themes. Grouped by <b>deity & practice family</b>. From 1 Apr 2026, excl. top-4 leaders & offline.`,
+   general:`<b>Faith is a high-reach, low-conversion segment (0.63% overall).</b> `
+    +`<b>Devi & Goddess</b> (40% of demand) and <b>Hanuman</b> (30%) dominate but convert only ~0.6%, while <b>Shiva & Mahadev</b> (1.18%), <b>Other Deities</b> (1.05%) and the small <b>Shamanic</b> bucket (1.58%) convert ~2× better on far less volume. `
+    +`The <b>music-vs-practice</b> split holds: <b>Kirtan & Bhajan</b> pull views but convert 0.53%, while Sadhana/mantra practice sells better. `
+    +`Across families, demand skews to <b>weekends & evenings</b> but buyers convert on <b>weekday nights</b> — use deity-invocation & devotional music for reach, and sadhana/mantra for conversion.`},
+};
+const segState={nonfaith:'__general__', faith:'__general__'};
+function renderSeg(seg){
+ const D=DATA[seg], M=SEG[seg], o=D.overall;
+ document.getElementById(M.pfx+'-note').innerHTML=M.note(o);
+ const tabs=[['__general__','General']].concat(D.order.map(k=>[k,k]));
+ const tabsEl=document.getElementById(M.pfx+'-tabs');
+ tabsEl.innerHTML=tabs.map(t=>`<button class="pill ${segState[seg]===t[0]?'on':''}" data-t="${esc(t[0])}">${esc(t[1])}</button>`).join('');
+ tabsEl.querySelectorAll('.pill').forEach(b=>b.onclick=()=>{segState[seg]=b.dataset.t;renderSeg(seg);});
+ const body=document.getElementById(M.pfx+'-body');
+ if(segState[seg]==='__general__') segGeneral(body,D,M); else segTheme(body,segState[seg],D.themes[segState[seg]],M);
+}
+function segGeneral(body,D,M){
+ const gn=M.groupNoun, GN=gn.charAt(0).toUpperCase()+gn.slice(1);
+ body.innerHTML=`<div class="kpis kbox"></div><div class="ibox"></div>`
+  +`<h2>${GN==='Family'?'Families':'Themes'} by demand <span class="sub">sorted by total PV · click a header to sort</span></h2>`
+  +`<div class="card"><div class="ovbox"></div></div>`;
+ body.querySelector('.kbox').innerHTML=kpiRow(D.overall);
+ body.querySelector('.ibox').innerHTML=`<div class="insight">${M.general}</div>`;
+ makeTable(body.querySelector('.ovbox'),{
+   rows:D.overview, searchGet:r=>r.key, placeholder:`Search ${gn}s…`, noun:gn+'s', sortCol:3, sortDir:-1,
    cols:[
-     {label:'Theme',get:r=>esc(r.key),val:r=>r.key,align:'left'},
+     {label:GN,get:r=>esc(r.key),val:r=>r.key,align:'left'},
      {label:'Sessions',get:r=>r.sess,val:r=>r.sess},
      {label:'Runs',get:r=>r.n,val:r=>r.n},
      {label:'Total PV',get:r=>fmt(r.PV),val:r=>r.PV},
@@ -759,33 +768,37 @@ function nfGeneral(body,NF){
      {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
    ]});
 }
-function nfTheme(body,name,T){
+function segTheme(body,name,T,M){
  const o=T.overall;
- body.innerHTML=`<div class="kpis" id="nf-tk"></div><div id="nf-ti"></div>`
+ body.innerHTML=`<div class="kpis kbox"></div><div class="ibox"></div>`
   +`<h2>Sub-types <span class="sub">auto-grouped from session names · click a header to sort</span></h2>`
-  +`<div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Each session is tagged by the dominant keyword in its name.</div><div id="nf-sub"></div></div>`
-  +`<h2>Sessions <span class="sub">every session in this theme · runs = times scheduled</span></h2>`
-  +`<div class="card"><div id="nf-sess"></div></div>`
+  +`<div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Each session is tagged by the dominant keyword in its name.</div><div class="subbox"></div></div>`
+  +`<h2>Sessions <span class="sub">every session in this ${M.groupNoun} · runs = times scheduled</span></h2>`
+  +`<div class="card"><div class="sessbox"></div></div>`
   +`<h2>By day of week</h2><div class="grid2">`
-  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="nf-dow-pv"></div></div>`
-  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="nf-dow-rate" class="dual"></div></div></div>`
+  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div class="dowpv"></div></div>`
+  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div class="dowrate dual"></div></div></div>`
   +`<h2>By time of day <span class="sub">IST</span></h2><div class="grid2">`
-  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div id="nf-time-pv"></div></div>`
-  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div id="nf-time-rate" class="dual"></div></div></div>`;
- document.getElementById('nf-tk').innerHTML=[
-   ['Sessions',o.inst,o.sess+' distinct'],['Total demand (PV)',fmt(o.PV),'page views'],
-   ['Avg PV / run',fmt(o.avgPV),'per session'],['Add-to-cart',o.cart.toFixed(2)+'%','weighted'],
-   ['Conversion',o.sale.toFixed(2)+'%','weighted'],
- ].map(k=>`<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div><div class="d">${k[2]}</div></div>`).join('');
+  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Total demand (PV)</span></div><div class="timepv"></div></div>`
+  +`<div class="card"><div class="legend"><span><span class="sw" style="background:var(--s2)"></span>Add-to-cart %</span><span><span class="sw" style="background:var(--s3)"></span>Conversion %</span></div><div class="timerate dual"></div></div></div>`;
+ body.querySelector('.kbox').innerHTML=kpiRow(o);
  const bullets=T.insights||[];
- document.getElementById('nf-ti').innerHTML = bullets.length
+ body.querySelector('.ibox').innerHTML = bullets.length
    ? `<div class="insight"><div style="font-weight:600;margin-bottom:4px">Deep insights — ${esc(name)}</div>`
      +`<ul style="margin:2px 0 0;padding-left:18px">`+bullets.map(b=>`<li style="margin:5px 0;line-height:1.45">${b}</li>`).join('')+`</ul></div>`
    : `<div class="insight">Not enough signal in <b>${esc(name)}</b> for confident recommendations — small sample.</div>`;
- makeTable(document.getElementById('nf-sub'),{
+ makeTable(body.querySelector('.subbox'),{
    rows:T.subtypes, searchGet:r=>r.key, placeholder:'Search sub-types…', noun:'sub-types', sortCol:3, sortDir:-1,
-   cols:NF_COLS('Sub-type') });
- makeTable(document.getElementById('nf-sess'),{
+   cols:[
+     {label:'Sub-type',get:r=>esc(r.key),val:r=>r.key,align:'left'},
+     {label:'Sessions',get:r=>r.sess,val:r=>r.sess},
+     {label:'Runs',get:r=>r.n,val:r=>r.n},
+     {label:'Total PV',get:r=>fmt(r.PV),val:r=>r.PV},
+     {label:'Avg PV/run',get:r=>fmt(r.avgPV),val:r=>r.avgPV},
+     {label:'Add-to-cart',get:r=>pct(r.cart),val:r=>r.cart},
+     {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
+   ]});
+ makeTable(body.querySelector('.sessbox'),{
    rows:T.sessions, searchGet:r=>r.key, placeholder:'Search sessions…', noun:'sessions', sortCol:2, sortDir:-1,
    cols:[
      {label:'Session',get:r=>esc(r.key),val:r=>r.key,align:'left'},
@@ -795,10 +808,10 @@ function nfTheme(body,name,T){
      {label:'Add-to-cart',get:r=>pct(r.cart),val:r=>r.cart},
      {label:'Conversion',get:r=>pct(r.sale),val:r=>r.sale},
    ]});
- barChart(document.getElementById('nf-dow-pv'),T.dow,r=>r.PV,r=>dowAb(r.key),css('--s1'),fmt,r=>'('+r.n+')');
- dualChart(document.getElementById('nf-dow-rate'),T.dow,r=>dowAb(r.key));
- barChart(document.getElementById('nf-time-pv'),T.time,r=>r.PV,r=>timeLab(r.key),css('--s1'),fmt,r=>'('+r.n+')');
- dualChart(document.getElementById('nf-time-rate'),T.time,r=>timeLab(r.key));
+ barChart(body.querySelector('.dowpv'),T.dow,r=>r.PV,r=>dowAb(r.key),css('--s1'),fmt,r=>'('+r.n+')');
+ dualChart(body.querySelector('.dowrate'),T.dow,r=>dowAb(r.key));
+ barChart(body.querySelector('.timepv'),T.time,r=>r.PV,r=>timeLab(r.key),css('--s1'),fmt,r=>'('+r.n+')');
+ dualChart(body.querySelector('.timerate'),T.time,r=>timeLab(r.key));
 }
 
 // tabs
@@ -806,11 +819,11 @@ let cur='all';
 function setTab(k){
  cur=k;
  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.k===k));
- const sv=document.getElementById('std-view'), mv=document.getElementById('mom-view'), lv=document.getElementById('leaders-view'), nv=document.getElementById('nonfaith-view');
+ const sv=document.getElementById('std-view'), mv=document.getElementById('mom-view'), lv=document.getElementById('leaders-view'), nv=document.getElementById('nonfaith-view'), fv=document.getElementById('faith-view');
  const b=document.getElementById('banner');
  const n=x=>DATA[x].overall.sessions.toLocaleString();
- sv.style.display='none'; mv.style.display='none'; lv.style.display='none'; nv.style.display='none';
- document.getElementById('monthbar').style.display = (k==='leaders'||k==='nonfaith')?'none':'';
+ sv.style.display='none'; mv.style.display='none'; lv.style.display='none'; nv.style.display='none'; fv.style.display='none';
+ document.getElementById('monthbar').style.display = (k==='leaders'||k==='nonfaith'||k==='faith')?'none':'';
  if(k==='mom'){
    mv.style.display=''; renderMoM();
    b.innerHTML=`<b>Month-on-month funnel</b> by weekday and hour, Apr–Jul 2026. Toggle cohort and metric below. Platform PVs are browse-time; session metrics are by scheduled start.`;
@@ -818,8 +831,11 @@ function setTab(k){
    lv.style.display=''; renderLeaders();
    b.innerHTML=`<b>Top-4-leaders deep-dive</b> — each leader's <b>online</b> sessions over the last ~6 months. Pick a leader below to see how topic, day, time and price relate to their demand & conversion. Samples are small — directional.`;
  }else if(k==='nonfaith'){
-   nv.style.display=''; renderNonFaith();
+   nv.style.display=''; renderSeg('nonfaith');
    b.innerHTML=`<b>Online Non-Faith (without top 4 leaders)</b> — every faith/religion session removed (the whole Devotional & Deity theme plus deity/scripture sessions hiding elsewhere). Pick a theme below for its chakra-style deep-dive, or <b>General</b> for the high-level picture.`;
+ }else if(k==='faith'){
+   fv.style.display=''; renderSeg('faith');
+   b.innerHTML=`<b>Faith (without top 4 leaders)</b> — the faith/religion sessions removed from the Non-Faith tab, grouped by <b>deity & practice family</b> (Devi, Hanuman, Shiva, Sadhana, Kirtan…). Pick a family for its deep-dive, or <b>General</b> for the high-level picture.`;
  }else{
    sv.style.display='';
    render(DATA[k], k==='all'?null:DATA.all);   // deltas baselined to All sessions
@@ -837,6 +853,7 @@ document.getElementById('tabs').innerHTML=[
  ['mom','Month-on-month','weekday & hour funnel'],
  ['leaders','Top 4 leaders','per-leader deep-dive'],
  ['nonfaith','Online Non-Faith','without top 4 · by theme'],
+ ['faith','Faith','without top 4 · by deity'],
 ].map(t=>`<button class="tab" data-k="${t[0]}">${t[1]}<span class="c">${t[2]}</span></button>`).join('');
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.k)));
 renderMonthSel();
