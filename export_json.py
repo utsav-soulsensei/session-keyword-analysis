@@ -418,6 +418,76 @@ def _rate_rows(frame, groupcol, order=None, keyname='key'):
     else: out=sorted(out,key=lambda r:-r['PV'])
     return out
 
+def _shr(x):
+    v=100*x
+    return '&lt;1' if v<0.5 else str(round(v))
+def _cln(k): return re.sub(r'\s*\(.*?\)','',re.sub(r'^\d+\s','',str(k))).strip()
+def _theme_insights(s, theme):
+    """Deep, quantified, actionable insights mined per theme. Returns ≤4 HTML strings,
+       ordered by actionability. Gated on min conversions to avoid small-sample noise."""
+    pvT=s['PV'].sum()
+    if not pvT: return []
+    Tcart=100*s['carts'].sum()/pvT; Tsale=100*s['sales'].sum()/pvT; TsalesN=int(s['sales'].sum())
+    def agg(g):
+        p=g['PV'].sum()
+        # .apply() drops the grouping column, so guard disp_name (it's 1 per-session anyway)
+        nsess=g['disp_name'].nunique() if 'disp_name' in g.columns else 1
+        return pd.Series({'PV':p,'runs':len(g),'sess':nsess,
+                          'sale':100*g['sales'].sum()/p if p else 0,'cart':100*g['carts'].sum()/p if p else 0,
+                          'salesN':int(g['sales'].sum()),'avgPV':p/len(g) if len(g) else 0})
+    sess=s.groupby('disp_name').apply(agg).sort_values('PV',ascending=False)
+    top=sess.iloc[0]; topname=sess.index[0]
+    ins=[]
+    if top.PV/pvT>=0.45:
+        ins.append(('risk',f"⚠️ <b>Single-session dependency:</b> <b>{topname}</b> is {round(100*top.PV/pvT)}% of the theme's demand ({int(top.runs)} runs, {int(round(top.avgPV))} PV/run). The theme lives or dies with this one session — build a second flagship to de-risk."))
+    if top.PV/pvT>=0.15 and top.sale<=0.55*Tsale and top.salesN>=1:
+        ins.append(('funnel',f"<b>{topname}</b> is a <b>reach magnet, not a seller</b>: {int(round(top.avgPV))} PV/run (biggest in the theme) but only {top.sale:.2f}% conversion vs {Tsale:.2f}% theme avg. Use it for list-building/retargeting, not revenue — don't let its volume flatter the theme."))
+    subg=s.groupby('_sub').apply(agg)
+    domsub=subg.sort_values('PV').iloc[-1]; domsubn=subg.sort_values('PV').index[-1]
+    concentrated=(top.PV/pvT>=0.45) or (domsub.PV/pvT>=0.45)
+    cands=subg[(subg.index!='Other')&(subg['sess']>=2)&(subg['PV']/pvT<=0.22)&(subg['salesN']>=3)].sort_values('sale',ascending=False)
+    for name,r in cands.iterrows():
+        if r.sale>=max(1.35*Tsale,Tsale+0.4):
+            ins.append(('scale',f"<b>Scale “{name}”:</b> converts <b>{r.sale:.2f}%</b> vs {Tsale:.2f}% theme avg, yet only {int(r.runs)} runs / {_shr(r.PV/pvT)}% of demand across {int(r.sess)} sessions. Under-exposed high-converter — schedule more.")); break
+        if concentrated and name!=domsubn and r.sale>=max(Tsale,0.9*domsub.sale):
+            ins.append(('scale',f"<b>Look beyond “{domsubn}”:</b> the “{name}” sessions convert <b>{r.sale:.2f}%</b> — on par with the {domsubn} flagship ({domsub.sale:.2f}%) — on just {int(r.runs)} runs / {_shr(r.PV/pvT)}% of demand. Proven headroom; scale {name} alongside {domsubn}.")); break
+    mentioned={topname}
+    for nm,r in sess.iterrows():
+        if nm==topname: continue
+        if r.sale>=1.4*Tsale and r.runs<=3 and r.avgPV>=0.6*(pvT/len(s)) and r.salesN>=2:
+            ins.append(('scale',f"<b>{nm}</b> is proven but under-scheduled: {r.sale:.2f}% conversion ({int(r.salesN)} sales) on just {int(r.runs)} run(s) at {int(round(r.avgPV))} PV/run. Run it more before demand cools.")); mentioned.add(nm); break
+    for nm,r in sess.sort_values('sale',ascending=False).iterrows():
+        if r.runs>=2 and r.salesN>=4 and r.sale>=1.3*Tsale and nm not in mentioned:
+            ins.append(('win',f"<b>Your most reliable converter is “{nm}”</b> — {r.sale:.2f}% across {int(r.runs)} runs ({int(r.salesN)} sales) at {int(round(r.avgPV))} PV/run, well above the {Tsale:.2f}% theme average. Lean into it.")); break
+    tg=s.groupby('time_bucket').apply(agg); peakT=tg.sort_values('PV').iloc[-1]; peakTn=tg.sort_values('PV').index[-1]
+    goodT=tg[(tg['PV']>=0.05*pvT)&(tg['salesN']>=3)]
+    if len(goodT):
+        bestT=goodT.sort_values('sale').iloc[-1]; bestTn=goodT.sort_values('sale').index[-1]
+        if bestTn!=peakTn and bestT.sale>=1.5*peakT.sale and peakT.PV/pvT>=0.25:
+            ins.append(('timing',f"<b>Timing mismatch:</b> most demand lands in <b>{_cln(peakTn)}</b> ({peakT.sale:.2f}% conv) but buyers convert in <b>{_cln(bestTn)}</b> ({bestT.sale:.2f}%). Shift some runs to the higher-intent window."))
+    s2=s.assign(wknd=s['dow_name'].isin(['Saturday','Sunday'])); wk=s2.groupby('wknd').apply(agg)
+    if True in wk.index and False in wk.index:
+        we,wd=wk.loc[True],wk.loc[False]
+        if we.PV/pvT>=0.35 and wd.salesN>=3 and we.salesN>=3 and wd.sale>=1.4*we.sale:
+            ins.append(('timing',f"<b>Weekend browses, weekday buys:</b> weekend pulls {round(100*we.PV/pvT)}% of views but converts {we.sale:.2f}% vs weekday {wd.sale:.2f}%. Keep weekends for reach; put conversion-focused runs mid-week."))
+    dg=s.groupby('dow_name').apply(agg)
+    if len(dg):
+        peakD=dg.sort_values('PV').iloc[-1]; peakDn=dg.sort_values('PV').index[-1]
+        goodD=dg[(dg['PV']>=0.08*pvT)&(dg['salesN']>=3)]
+        if len(goodD):
+            bestD=goodD.sort_values('sale').iloc[-1]; bestDn=goodD.sort_values('sale').index[-1]
+            if bestDn!=peakDn and bestD.sale>=1.6*peakD.sale and peakD.PV/pvT>=0.18:
+                ins.append(('timing',f"<b>Best demand day ≠ best sales day:</b> <b>{peakDn}</b> draws the most views but converts {peakD.sale:.2f}%, while <b>{bestDn}</b> converts {bestD.sale:.2f}%. Add {bestDn} slots for the sessions you want to <i>sell</i>."))
+    if Tsale>0 and Tcart/Tsale>=8 and TsalesN>=5:
+        ins.append(('leak',f"<b>Interest is high, closing is weak:</b> {Tcart:.2f}% add-to-cart but only {Tsale:.2f}% purchase — a <b>{Tcart/Tsale:.0f}× drop</b> from cart to buy (vs ~6× across non-faith). Strong intent, weak close — test price, urgency or checkout."))
+    PRI={'scale':0,'win':1,'timing':2,'funnel':3,'leak':4,'risk':5}
+    ins.sort(key=lambda x:PRI.get(x[0],9))
+    seen=set(); out=[]
+    for tag,html in ins:
+        if tag in ('timing',) and html in seen: continue
+        out.append(html); seen.add(html)
+    return out[:4]
+
 def _theme_deepdive(sub, theme):
     lab=_subtype_labels(sub, theme)
     sub=sub.assign(_sub=sub['disp_name'].map(lab))
@@ -427,6 +497,7 @@ def _theme_deepdive(sub, theme):
                  'avgPV':int(round(pv/len(sub))) if len(sub) else 0,
                  'cart':float(100*sub['carts'].sum()/pv) if pv else 0,
                  'sale':float(100*sub['sales'].sum()/pv) if pv else 0},
+      'insights':_theme_insights(sub, theme),
       'subtypes':_rate_rows(sub,'_sub'),
       'sessions':_rate_rows(sub,'disp_name'),
       'dow':_rate_rows(sub,'dow_name',DOW_ORDER),
@@ -439,19 +510,22 @@ def nonfaith_block(online_no4):
     n_dev=int((c['main_keyword']=='Devotional & Deity').sum())
     c=c[~faith].copy()
     totalPV=c['PV'].sum()
-    tstat=c.groupby('main_keyword').agg(sess=('disp_name','nunique'),PV=('PV','sum'))
-    meaningful=[t for t in tstat.index if t!='Other' and
-                (tstat.loc[t,'sess']>=5 or 100*tstat.loc[t,'PV']/totalPV>=1.0)]
-    c['tab']=c['main_keyword'].where(c['main_keyword'].isin(meaningful),'Other')
-    overview=_rate_rows(c,'tab'); [r.update({'PV_pct':round(100*r['PV']/totalPV,1)}) for r in overview]
-    themes={k:_theme_deepdive(g,k) for k,g in c.groupby('tab')}
+    # top 10 real themes by PV get their own tab; everything else -> 'Others'
+    tp=c[c['main_keyword']!='Other'].groupby('main_keyword')['PV'].sum().sort_values(ascending=False)
+    top10=list(tp.index[:10])
+    c['tab']=c['main_keyword'].where(c['main_keyword'].isin(top10),'Others')
+    rows={r['key']:r for r in _rate_rows(c,'tab')}
+    for r in rows.values(): r['PV_pct']=round(100*r['PV']/totalPV,1)
+    order=[t for t in top10 if t in rows]+(['Others'] if 'Others' in rows else [])  # Others pinned last
+    overview=[rows[k] for k in order]
+    themes={k:_theme_deepdive(c[c['tab']==k],k) for k in order}
     return {
       'overall':{'inst':int(len(c)),'sess':int(c['disp_name'].nunique()),'PV':int(totalPV),
                  'avgPV':int(round(totalPV/len(c))) if len(c) else 0,
                  'cart':float(100*c['carts'].sum()/totalPV) if totalPV else 0,
                  'sale':float(100*c['sales'].sum()/totalPV) if totalPV else 0,
                  'removed_faith':int(faith.sum()),'removed_devotional':n_dev},
-      'order':[r['key'] for r in overview],
+      'order':order,
       'overview':overview,
       'themes':themes,
     }

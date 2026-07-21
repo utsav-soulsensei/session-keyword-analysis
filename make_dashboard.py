@@ -761,16 +761,6 @@ function nfGeneral(body,NF){
 }
 function nfTheme(body,name,T){
  const o=T.overall;
- // insight facts
- const byPV=[...T.sessions].sort((a,b)=>b.PV-a.PV);
- const topS=byPV[0];
- const conv=[...T.sessions].filter(s=>s.PV>=Math.max(1000,o.PV*0.03)).sort((a,b)=>b.sale-a.sale)[0]||byPV[0];
- const bestSub=[...T.subtypes].filter(s=>s.key!=='Other'&&s.sess>=2).sort((a,b)=>b.sale-a.sale)[0];
- const peakDay=[...T.dow].sort((a,b)=>b.PV-a.PV)[0];
- const peakTime=[...T.time].sort((a,b)=>b.PV-a.PV)[0];
- // "best converting slot" must carry real volume, else a 1-session slot wins on noise
- const tmin=Math.max(400,o.PV*0.05);
- const bestTime=([...T.time].filter(t=>t.PV>=tmin).sort((a,b)=>b.sale-a.sale)[0])||peakTime;
  body.innerHTML=`<div class="kpis" id="nf-tk"></div><div id="nf-ti"></div>`
   +`<h2>Sub-types <span class="sub">auto-grouped from session names · click a header to sort</span></h2>`
   +`<div class="card"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Each session is tagged by the dominant keyword in its name.</div><div id="nf-sub"></div></div>`
@@ -787,11 +777,11 @@ function nfTheme(body,name,T){
    ['Avg PV / run',fmt(o.avgPV),'per session'],['Add-to-cart',o.cart.toFixed(2)+'%','weighted'],
    ['Conversion',o.sale.toFixed(2)+'%','weighted'],
  ].map(k=>`<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div><div class="d">${k[2]}</div></div>`).join('');
- const concentrated = topS && o.PV && (topS.PV/o.PV>=0.5);
- ins('nf-ti',`<b>${esc(name)}:</b> ${concentrated?`concentrated — <b>${esc(topS.key)}</b> alone is ${Math.round(100*topS.PV/o.PV)}% of the theme's demand. `:`top session by demand is <b>${esc(topS.key)}</b> (${fmt(topS.PV)} PV, ${pct(topS.sale)}). `}`
-  +(bestSub?`Best-converting sub-type: <b>${esc(bestSub.key)}</b> (${pct(bestSub.sale)}, ${bestSub.sess} sessions). `:'')
-  +`Best-converting session at scale is <b>${esc(conv.key)}</b> (${pct(conv.sale)}, avg ${fmt(conv.avgPV)} PV/run). `
-  +`Demand peaks on <b>${dowAb(peakDay.key)}</b> and in the <b>${cleanKey(peakTime.key)}</b> slot; conversion is best in the <b>${cleanKey(bestTime.key)}</b> slot (${pct(bestTime.sale)}).`);
+ const bullets=T.insights||[];
+ document.getElementById('nf-ti').innerHTML = bullets.length
+   ? `<div class="insight"><div style="font-weight:600;margin-bottom:4px">Deep insights — ${esc(name)}</div>`
+     +`<ul style="margin:2px 0 0;padding-left:18px">`+bullets.map(b=>`<li style="margin:5px 0;line-height:1.45">${b}</li>`).join('')+`</ul></div>`
+   : `<div class="insight">Not enough signal in <b>${esc(name)}</b> for confident recommendations — small sample.</div>`;
  makeTable(document.getElementById('nf-sub'),{
    rows:T.subtypes, searchGet:r=>r.key, placeholder:'Search sub-types…', noun:'sub-types', sortCol:3, sortDir:-1,
    cols:NF_COLS('Sub-type') });
